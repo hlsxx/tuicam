@@ -10,7 +10,7 @@ use tokio;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn error::Error>> {
   let mut terminal = ratatui::init();
-  let mut event_handler = EventHandler::new();
+  let event_handler = EventHandler::new();
 
   terminal.clear()?;
 

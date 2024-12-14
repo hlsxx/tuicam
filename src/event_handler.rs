@@ -1,16 +1,18 @@
-use crossterm::event::{EventStream, KeyCode};
-use crossterm::event::Event::Key;
-use tokio::sync::mpsc;
-use futures::{select, FutureExt, StreamExt};
+use std::time::Duration;
+
+use ratatui::crossterm::event::{Event, EventStream, KeyCode};
+use tokio::{select, sync::mpsc};
+use futures::{FutureExt, StreamExt};
 
 pub enum KeyAction {
   Exit,
-  Another
+  None
 }
 
 pub struct EventHandler {
   _tx: mpsc::UnboundedSender<KeyAction>,
-  rx: mpsc::UnboundedReceiver<KeyAction>
+  rx: mpsc::UnboundedReceiver<KeyAction>,
+  _handle: tokio::task::JoinHandle<()>
 }
 
 impl EventHandler {
@@ -26,7 +28,7 @@ impl EventHandler {
 
         if let Some(Ok(event)) = crossterm_event {
           match event {
-            Key(key_event) => {
+            Event::Key(key_event) => {
               if key_event.code == KeyCode::Esc {
                 let _ = tx_clone.send(KeyAction::Exit);
               }
@@ -39,7 +41,8 @@ impl EventHandler {
 
     Self {
       _tx,
-      rx
+      rx,
+      _handle
     }
   }
 

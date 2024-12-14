@@ -24,15 +24,13 @@ impl<'a> App<'a> {
     }
   }
 
+  /// Runs TUI application
+  /// 
+  /// Handles user events
+  ///
+  /// Renders widgets into a frames
   pub async fn run(&mut self) -> Result<(), Box<dyn error::Error>> {
     while self.is_running {
-      if let Some(key_action) = self.event_handler.next().await {
-        match key_action {
-          KeyAction::Exit => self.is_running = false,
-          _ => {}
-          }
-      }
-
       self.terminal.draw(|frame| {
         let main_layout = Layout::default()
           .constraints(vec![
@@ -46,6 +44,13 @@ impl<'a> App<'a> {
         frame.render_widget(&p, main_layout[0]);
         frame.render_widget(p, main_layout[1]);
       })?;
+
+      if let Some(key_action) = self.event_handler.next().await {
+        match key_action {
+          KeyAction::Exit => self.is_running = false,
+          _ => {}
+        }
+      }
     }
 
     Ok(())
