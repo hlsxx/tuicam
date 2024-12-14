@@ -1,6 +1,6 @@
 use std::error;
 
-use ratatui::{layout::{Constraint, Layout}, widgets::Paragraph, DefaultTerminal};
+use ratatui::{layout::{Alignment, Constraint, Flex, Layout}, style::Style, widgets::{Block, BorderType, Clear, Paragraph}, DefaultTerminal, Frame};
 
 use crate::event_handler::{EventHandler, KeyAction};
 
@@ -32,17 +32,28 @@ impl<'a> App<'a> {
   pub async fn run(&mut self) -> Result<(), Box<dyn error::Error>> {
     while self.is_running {
       self.terminal.draw(|frame| {
-        let main_layout = Layout::default()
-          .constraints(vec![
-            Constraint::Percentage(50),
-            Constraint::Percentage(50)
-          ])
-          .split(frame.area());
+        let area = frame.area();
 
-        let p = Paragraph::new("Hello");
+        let block = Block::bordered()
+          .style(Style::default())
+          .border_type(BorderType::Rounded);
 
-        frame.render_widget(&p, main_layout[0]);
-        frame.render_widget(p, main_layout[1]);
+        let cam_paragraph = Paragraph::new("Hello")
+          .block(block)
+          .alignment(Alignment::Center)
+          .centered();
+
+        let vertical = Layout::vertical([Constraint::Percentage(50)])
+          .flex(Flex::Center);
+
+        let horizontal = Layout::horizontal([Constraint::Percentage(50)])
+          .flex(Flex::Center);
+
+        let [area] = vertical.areas(area);
+        let [area] = horizontal.areas(area);
+
+        frame.render_widget(Clear, area);
+        frame.render_widget(cam_paragraph, area);
       })?;
 
       if let Some(key_action) = self.event_handler.next().await {
@@ -55,4 +66,5 @@ impl<'a> App<'a> {
 
     Ok(())
   }
+
 }
