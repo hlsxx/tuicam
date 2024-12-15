@@ -15,6 +15,7 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
   terminal.clear()?;
 
   let app_result = App::new(&mut terminal, event_handler)
+    .init_camera()?
     .run()
     .await;
 
