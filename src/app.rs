@@ -6,8 +6,10 @@ use ratatui::{layout::{Alignment, Constraint, Flex, Layout}, style::Style, widge
 use opencv::{
   core, highgui, imgproc::{self, THRESH_BINARY}, prelude::*, videoio::{self, VideoCapture}
 };
+use tokio::try_join;
 
 use crate::event_handler::{EventHandler, KeyAction};
+use crate::video_capture_handler::VideoCaptureHandler;
 
 fn clear_console() {
   print!("\x1b[2J\x1b[H");
@@ -38,8 +40,11 @@ pub struct App<'a> {
   // Base terminal
   terminal: &'a mut DefaultTerminal,
 
-  //Event handler
+  // Event handler
   event_handler: EventHandler,
+
+  // Video capture handler
+  video_capture_handler: VideoCaptureHandler,
 
   // App is running
   is_running: bool
@@ -47,10 +52,15 @@ pub struct App<'a> {
 
 
 impl<'a> App<'a> {
-  pub fn new(terminal: &'a mut DefaultTerminal, event_handler: EventHandler) -> Self {
+  pub fn new(
+    terminal: &'a mut DefaultTerminal,
+    event_handler: EventHandler,
+    video_capture_handler: VideoCaptureHandler
+  ) -> Self {
     Self {
       terminal,
       event_handler,
+      video_capture_handler,
       is_running: true
     }
   }
@@ -62,84 +72,45 @@ impl<'a> App<'a> {
   /// Renders widgets into a frames
   pub async fn run(&mut self) -> Result<(), Box<dyn error::Error>> {
     while self.is_running {
-      let mut frame = core::Mat::default();
-      let mut res_frame = core::Mat::default();
-      let mut gray_frame = core::Mat::default();
-      let mut binary_frame = core::Mat::default();
+      let mut frame_buffer = String::new();
 
-      if let Some(cam) = self.cam.as_mut() {
-        // loop {
-          cam.read(&mut frame)?;
-
-          if frame.empty() {
-            continue;
-          }
-
-          imgproc::cvt_color(&frame, &mut gray_frame, imgproc::COLOR_BGR2GRAY, 0)?;
-          imgproc::threshold(&gray_frame, &mut binary_frame, 128.0, 255.0, THRESH_BINARY)?;
-
-          let mut small_frame = Mat::default();
-          imgproc::resize(&binary_frame, &mut small_frame, core::Size { width: 80, height: 20 }, 0.0, 0.0, imgproc::INTER_LINEAR)?;
-
-
-          // highgui::imshow("Camera", &binary_frame)?;
-
-          clear_console();
-          let x = image_to_ascii(&small_frame);
-          println!("{}", x);
-          // std::thread::sleep(Duration::from_millis(30));
-        // }
+      if let Some(value) = self.video_capture_handler.next().await {
+        frame_buffer = value;
       }
 
-      // self.terminal.draw(|frame| {
-      //   let area = frame.area();
-      //
-      //   let block = Block::bordered()
-      //     .style(Style::default())
-      //     .border_type(BorderType::Rounded);
-      //
-      //   let cam_paragraph = Paragraph::new("Hello")
-      //     .block(block)
-      //     .alignment(Alignment::Center)
-      //     .centered();
-      //
-      //   let vertical = Layout::vertical([Constraint::Percentage(50)])
-      //     .flex(Flex::Center);
-      //
-      //   let horizontal = Layout::horizontal([Constraint::Percentage(50)])
-      //     .flex(Flex::Center);
-      //
-      //   let [area] = vertical.areas(area);
-      //   let [area] = horizontal.areas(area);
-      //
-      //   frame.render_widget(Clear, area);
-      //   frame.render_widget(cam_paragraph, area);
-      // })?;
+      self.terminal.draw(|frame| {
+        let area = frame.area();
 
-      if let Some(key_action) = self.event_handler.next().await {
-        match key_action {
-          KeyAction::Exit => self.is_running = false,
-          _ => {}
-        }
-      }
+        let block = Block::bordered()
+          .style(Style::default())
+          .border_type(BorderType::Rounded);
+
+        let cam_paragraph = Paragraph::new(frame_buffer)
+          .block(block)
+          .alignment(Alignment::Center)
+          .centered();
+
+        let vertical = Layout::vertical([Constraint::Percentage(50)])
+          .flex(Flex::Center);
+
+        let horizontal = Layout::horizontal([Constraint::Percentage(50)])
+          .flex(Flex::Center);
+
+        let [area] = vertical.areas(area);
+        let [area] = horizontal.areas(area);
+
+        frame.render_widget(Clear, area);
+        frame.render_widget(cam_paragraph, area);
+      })?;
+
+      // if let Some(key_action) = self.event_handler.next().await {
+      //   match key_action {
+      //     KeyAction::Exit => self.is_running = false,
+      //     _ => {}
+      //   }
+      // }
     }
 
     Ok(())
   }
-
-  /*
-  * Inititialize a camera
-  */
-  pub fn init_camera(mut self) -> opencv::Result<Self> {
-    let cam = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
-
-    if !videoio::VideoCapture::is_opened(&cam)? {
-      return Err(opencv::Error::new(core::StsError, "Camera is not opened"));
-    }
-
-    self.cam = Some(cam);
-
-    Ok(self)
-  }
-
 }
