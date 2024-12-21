@@ -10,7 +10,9 @@ use frame_handler::FrameHandler;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn error::Error>> {
   let mut terminal = ratatui::init();
-  let frame_handler = FrameHandler::try_new()?;
+  let terminal_size = terminal.size()?;
+
+  let frame_handler = FrameHandler::try_new(terminal_size)?;
 
   terminal.clear()?;
 

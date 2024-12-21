@@ -1,7 +1,8 @@
 use crossterm::event::KeyCode;
-use ratatui::{layout::{Alignment, Constraint, Flex, Layout}, style::Style, widgets::{Block, BorderType, Clear, Paragraph}, DefaultTerminal};
+use ratatui::{layout::{Alignment, Constraint, Flex, Layout}, style::{Color, Style}, text::Line, widgets::{Block, BorderType, Clear, Paragraph}, DefaultTerminal};
 
 use crate::frame_handler::FrameHandler;
+pub const SCALE_FACTOR: u16 = 2;
 
 pub struct App<'a> {
   // Base terminal
@@ -28,9 +29,10 @@ impl<'a> App<'a> {
   /// 
   /// Handles user events
   ///
-  /// Renders widgets into a frames
+  /// Renders widgets into frames
   pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
     loop {
+      let terminal_size = self.terminal.size()?;
       let mut frame_buffer = String::new();
 
       if let Some(key_event) = self.frame_handler.get_event().await {
@@ -46,7 +48,10 @@ impl<'a> App<'a> {
         let area = frame.area();
 
         let block = Block::bordered()
-          .style(Style::default())
+          .border_style(Style::default().fg(Color::Rgb(168, 50, 62)))
+          .title_bottom(Line::from(" tui-cam-rs "))
+          .title_style(Style::default())
+          .title_alignment(Alignment::Center)
           .border_type(BorderType::Rounded);
 
         let cam_paragraph = Paragraph::new(frame_buffer)
@@ -54,10 +59,10 @@ impl<'a> App<'a> {
           .alignment(Alignment::Center)
           .centered();
 
-        let vertical = Layout::vertical([Constraint::Percentage(50)])
+        let horizontal = Layout::horizontal([Constraint::Length(terminal_size.width / SCALE_FACTOR)])
           .flex(Flex::Center);
 
-        let horizontal = Layout::horizontal([Constraint::Percentage(50)])
+        let vertical = Layout::vertical([Constraint::Length(terminal_size.height / SCALE_FACTOR)])
           .flex(Flex::Center);
 
         let [area] = vertical.areas(area);

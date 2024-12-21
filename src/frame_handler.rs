@@ -1,10 +1,13 @@
 use std::time::Duration;
 
 use crossterm::event::{EventStream, KeyEvent, Event};
+use ratatui::layout::Size;
 use tokio::{select, sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender}};
 use futures::{FutureExt, StreamExt};
 
 use opencv::{prelude::*, imgproc, videoio::{self, VideoCapture, VideoCaptureTrait}};
+
+use crate::app::SCALE_FACTOR;
 
 const ASCII_CHARS: &[u8] = b"@%#*+=-:. ";
 
@@ -13,6 +16,7 @@ enum FrameEvent {
   Event(KeyEvent)
 }
 
+/// Converts an image to ascii code
 fn image_to_ascii(frame: &opencv::core::Mat) -> String {
   let mut result = String::new();
 
@@ -37,11 +41,16 @@ pub struct FrameHandler {
 }
 
 impl FrameHandler {
-  pub fn try_new() -> opencv::Result<Self> {
+  pub fn try_new(terminal_size: Size) -> opencv::Result<Self> {
     let mut cam = VideoCapture::new(0, videoio::CAP_ANY)?;
     let mut frame = opencv::core::Mat::default();
     let mut gray_frame = opencv::core::Mat::default();
     let mut small_frame = opencv::core::Mat::default();
+
+    let image_size = opencv::core::Size {
+      width: (terminal_size.width / SCALE_FACTOR) as i32,
+      height: (terminal_size.height / SCALE_FACTOR) as i32
+    };
 
     let (_tx, rx) = unbounded_channel::<FrameEvent>();
 
@@ -63,7 +72,7 @@ impl FrameHandler {
             imgproc::resize(
               &gray_frame,
               &mut small_frame,
-              opencv::core::Size { width: 80, height: 40 }, 0.0, 0.0, imgproc::INTER_LINEAR
+              image_size, 0.0, 0.0, imgproc::INTER_LINEAR
             ).unwrap();
 
             let image_ascii = image_to_ascii(&small_frame);
