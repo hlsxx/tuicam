@@ -1,10 +1,13 @@
 use crossterm::event::KeyCode;
 use ratatui::{layout::{Alignment, Constraint, Direction, Flex, Layout}, style::{Color, Style, Stylize}, text::{Line, Span, Text}, widgets::{Block, BorderType, Clear, Paragraph}, DefaultTerminal};
 
+use opencv::{prelude::*, imgproc, videoio::{self, VideoCapture, VideoCaptureTrait}};
+
 use crate::channel::Channel;
 use crate::channel::AppEvent;
 
 pub const SCALE_FACTOR: u16 = 2;
+const ASCII_CHARS: &[u8] = b"@%#*+=-:. ";
 
 pub struct App<'a> {
   // Base terminal
@@ -44,7 +47,14 @@ impl<'a> App<'a> {
 
       if let Some(app_event) = self.channel.next().await {
         match app_event {
-          AppEvent::Frame(ascii_cam) => self.frame_buffer = ascii_cam,
+          AppEvent::Frame(frame) => {
+            let image_size = opencv::core::Size {
+              width: (terminal_size.width / SCALE_FACTOR) as i32,
+              height: (terminal_size.height / SCALE_FACTOR) as i32
+            };
+
+            self.frame_buffer = self.convert_frame_into_ascii(image_size, frame);
+          },
           AppEvent::Event(key_event) => {
             match key_event.code {
               KeyCode::Esc => break,
@@ -58,9 +68,7 @@ impl<'a> App<'a> {
         let area = frame.area();
 
         let chunks = Layout::new(Direction::Vertical, [
-          Constraint::Percentage(100),
-          Constraint::Length(2)
-        ]).split(area);
+          Constraint::Percentage(100), Constraint::Length(2) ]).split(area);
 
         let top_chunk = chunks[0];
         let bottom_chunk = chunks[1];
@@ -106,5 +114,31 @@ impl<'a> App<'a> {
     }
 
     Ok(())
+  }
+
+  pub fn convert_frame_into_ascii(&self, area_size: opencv::core::Size, frame: opencv::core::Mat) -> String {
+    let mut small_frame = opencv::core::Mat::default();
+
+    imgproc::resize(
+      &frame,
+      &mut small_frame,
+      area_size, 0.0, 0.0, imgproc::INTER_LINEAR
+    ).unwrap();
+
+    let mut ascii_image = String::new();
+
+    for y in 0..small_frame.rows() {
+      for x in 0..small_frame.cols() {
+        let intensity = small_frame.at_2d::<u8>(y, x).unwrap();
+        let char_index = (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
+        let ascii_char = ASCII_CHARS[char_index] as char;
+
+        ascii_image.push(ascii_char);
+      }
+
+      ascii_image.push_str("\n");
+    }
+
+    ascii_image
   }
 }

@@ -1,7 +1,7 @@
 use crossterm::event::KeyEvent;
 
 pub enum AppEvent {
-  Frame(String),
+  Frame(opencv::core::Mat),
   Event(KeyEvent)
 }
 

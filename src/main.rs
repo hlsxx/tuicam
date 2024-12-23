@@ -11,11 +11,10 @@ use handler::{FrameHandler, EventHandler};
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut terminal = ratatui::init();
-  let terminal_size = terminal.size()?;
 
   let mut channel = Channel::new();
 
-  let _frame_handler = FrameHandler::try_new(terminal_size, channel.get_tx())?;
+  let _frame_handler = FrameHandler::try_new(channel.get_tx())?;
   let _event_handler = EventHandler::new(channel.get_tx());
 
   terminal.clear()?;
