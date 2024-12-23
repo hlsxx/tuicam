@@ -1,15 +1,17 @@
 use crossterm::event::KeyCode;
 use ratatui::{layout::{Alignment, Constraint, Direction, Flex, Layout}, style::{Color, Style, Stylize}, text::{Line, Span, Text}, widgets::{Block, BorderType, Clear, Paragraph}, DefaultTerminal};
 
-use crate::frame_handler::FrameHandler;
+use crate::channel::Channel;
+use crate::channel::AppEvent;
+
 pub const SCALE_FACTOR: u16 = 2;
 
 pub struct App<'a> {
   // Base terminal
   terminal: &'a mut DefaultTerminal,
 
-  // Video capture handler
-  frame_handler: FrameHandler,
+  // App handler
+  channel: Channel,
 }
 
 
@@ -17,11 +19,11 @@ impl<'a> App<'a> {
 
   pub fn new(
     terminal: &'a mut DefaultTerminal,
-    frame_handler: FrameHandler
+    channel: Channel,
   ) -> Self {
     Self {
       terminal,
-      frame_handler,
+      channel
     }
   }
 
@@ -37,14 +39,21 @@ impl<'a> App<'a> {
       let terminal_size = self.terminal.size()?;
       let mut frame_buffer = String::new();
 
-      if let Some(key_event) = self.frame_handler.get_event().await {
-        match key_event.code {
-          KeyCode::Esc => break,
-          _ => {}
+      if let Some(app_event) = self.channel.next().await {
+        match app_event {
+          AppEvent::Frame(ascii_cam) => {
+            frame_buffer = ascii_cam;
+          },
+          AppEvent::Event(key_event) => {
+            match key_event.code {
+              KeyCode::Esc => break,
+              _ => {}
+            }
+          },
         }
       }
 
-      self.frame_handler.read_frame(&mut frame_buffer).await;
+      // self.frame_handler.read_frame(&mut frame_buffer).await;
 
       self.terminal.draw(|frame| {
         let area = frame.area();
