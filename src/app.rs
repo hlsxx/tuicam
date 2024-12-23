@@ -10,8 +10,11 @@ pub struct App<'a> {
   // Base terminal
   terminal: &'a mut DefaultTerminal,
 
-  // App handler
+  // App channel
   channel: Channel,
+
+  // Frame buffer (video buffer)
+  frame_buffer: String
 }
 
 
@@ -23,7 +26,8 @@ impl<'a> App<'a> {
   ) -> Self {
     Self {
       terminal,
-      channel
+      channel,
+      frame_buffer: String::new()
     }
   }
 
@@ -37,11 +41,10 @@ impl<'a> App<'a> {
 
     loop {
       let terminal_size = self.terminal.size()?;
-      let mut frame_buffer = String::new();
 
       if let Some(app_event) = self.channel.next().await {
         match app_event {
-          AppEvent::Frame(ascii_cam) => frame_buffer = ascii_cam,
+          AppEvent::Frame(ascii_cam) => self.frame_buffer = ascii_cam,
           AppEvent::Event(key_event) => {
             match key_event.code {
               KeyCode::Esc => break,
@@ -50,8 +53,6 @@ impl<'a> App<'a> {
           },
         }
       }
-
-      // self.frame_handler.read_frame(&mut frame_buffer).await;
 
       self.terminal.draw(|frame| {
         let area = frame.area();
@@ -71,7 +72,7 @@ impl<'a> App<'a> {
           .title_alignment(Alignment::Center)
           .border_type(BorderType::Rounded);
 
-        let cam_paragraph = Paragraph::new(frame_buffer)
+        let cam_paragraph = Paragraph::new(self.frame_buffer.clone())
           .block(block)
           .alignment(Alignment::Center)
           .centered();

@@ -29,6 +29,7 @@ fn image_to_ascii(frame: &opencv::core::Mat) -> String {
   result
 }
 
+#[allow(unused)]
 pub struct FrameHandler(pub tokio::task::JoinHandle<()>);
 
 impl FrameHandler {
@@ -65,6 +66,7 @@ impl FrameHandler {
   }
 }
 
+#[allow(unused)]
 pub struct EventHandler(pub tokio::task::JoinHandle<()>);
 
 impl EventHandler {
