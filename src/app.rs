@@ -1,7 +1,7 @@
 use crossterm::event::KeyCode;
 use ratatui::{layout::{Alignment, Constraint, Direction, Flex, Layout}, style::{Color, Style, Stylize}, text::{Line, Span, Text}, widgets::{Block, BorderType, Clear, Paragraph}, DefaultTerminal};
 
-use opencv::{prelude::*, imgproc, videoio::{self, VideoCapture, VideoCaptureTrait}};
+use opencv::prelude::*;
 
 use crate::channel::Channel;
 use crate::channel::AppEvent;
@@ -57,7 +57,9 @@ impl<'a> App<'a> {
           },
           AppEvent::Event(key_event) => {
             match key_event.code {
-              KeyCode::Esc => break,
+              KeyCode::Esc => {
+                break;
+              },
               _ => {}
             }
           },
@@ -118,11 +120,14 @@ impl<'a> App<'a> {
 
   pub fn convert_frame_into_ascii(&self, area_size: opencv::core::Size, frame: opencv::core::Mat) -> String {
     let mut small_frame = opencv::core::Mat::default();
+    // let mut binary_frame = opencv::core::Mat::default();
 
-    imgproc::resize(
+    // opencv::imgproc::threshold(&frame, &mut binary_frame, 128.0, 255.0, THRESH_BINARY).unwrap();
+
+    opencv::imgproc::resize(
       &frame,
       &mut small_frame,
-      area_size, 0.0, 0.0, imgproc::INTER_LINEAR
+      area_size, 0.0, 0.0, opencv::imgproc::INTER_LINEAR
     ).unwrap();
 
     let mut ascii_image = String::new();
