@@ -18,8 +18,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   let _frame_handler = FrameHandler::try_new(terminal_size, channel.get_tx())?;
   let _event_handler = EventHandler::new(channel.get_tx());
 
-  // tokio::try_join!(frame_handler.0, event_handler.0)?;
-
   terminal.clear()?;
 
   let app_result = App::new(&mut terminal, channel)

@@ -42,7 +42,7 @@ impl FrameHandler {
     };
 
     let handle = tokio::spawn(async move {
-      let mut interval = tokio::time::interval(Duration::from_millis(300));
+      let mut interval = tokio::time::interval(Duration::from_millis(50));
 
       loop {
         cam.read(&mut frame).unwrap();

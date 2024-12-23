@@ -41,9 +41,7 @@ impl<'a> App<'a> {
 
       if let Some(app_event) = self.channel.next().await {
         match app_event {
-          AppEvent::Frame(ascii_cam) => {
-            frame_buffer = ascii_cam;
-          },
+          AppEvent::Frame(ascii_cam) => frame_buffer = ascii_cam,
           AppEvent::Event(key_event) => {
             match key_event.code {
               KeyCode::Esc => break,
