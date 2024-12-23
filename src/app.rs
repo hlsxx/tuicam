@@ -51,7 +51,7 @@ impl<'a> App<'a> {
 
         let chunks = Layout::new(Direction::Vertical, [
           Constraint::Percentage(100),
-          Constraint::Length(5)
+          Constraint::Length(2)
         ]).split(area);
 
         let top_chunk = chunks[0];
