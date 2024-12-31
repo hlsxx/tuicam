@@ -1,4 +1,7 @@
-use std::time::Duration;
+use std::{
+  sync::{Arc, RwLock},
+  time::Duration
+};
 
 use crossterm::event::{EventStream, Event};
 use futures::{FutureExt, StreamExt};
@@ -13,7 +16,9 @@ pub enum ImageConvertType {
   Threshold
 }
 
+/// Frame handler config
 pub struct FrameHandlerConfig {
+  /// Image convert type (camera mode)
   pub image_convert_type: ImageConvertType
 }
 
@@ -26,13 +31,16 @@ impl Default for FrameHandlerConfig {
 }
 
 #[allow(unused)]
-pub struct FrameHandler {
-  config: FrameHandlerConfig
-}
+pub struct FrameHandler;
 
 impl FrameHandler {
+  /// Spawns a new tokio task
+  ///
+  /// Opens a device camera
+  ///
+  /// Converts image into a grayscale image
   pub fn try_new(
-    config: FrameHandlerConfig,
+    config: Arc<RwLock<FrameHandlerConfig>>,
     tx: tokio::sync::mpsc::UnboundedSender<AppEvent>
   ) -> opencv::Result<Self> {
     let mut cam = VideoCapture::new(0, videoio::CAP_ANY)?;
@@ -46,19 +54,30 @@ impl FrameHandler {
         cam.read(&mut frame).unwrap();
 
         let mut gray_frame = opencv::core::Mat::default();
-        let mut binary_frame = opencv::core::Mat::default();
 
         imgproc::cvt_color(&frame, &mut gray_frame, imgproc::COLOR_BGR2GRAY, 0).unwrap();
-        // imgproc::threshold(&gray_frame, &mut binary_frame, 128.0, 255.0, imgproc::THRESH_BINARY).unwrap();
 
-        tx.send(AppEvent::Frame(gray_frame)).unwrap();
+        let res_frame = if config.read().unwrap().image_convert_type == ImageConvertType::Threshold {
+          let mut binary_frame = opencv::core::Mat::default();
+
+          imgproc::threshold(
+            &gray_frame,
+            &mut binary_frame,
+            128.0, 255.0,
+            imgproc::THRESH_BINARY
+          ).unwrap();
+
+          binary_frame
+        } else {
+          gray_frame
+        };
+
+        tx.send(AppEvent::Frame(res_frame)).unwrap();
         interval.tick().await;
       }
     });
 
-    Ok(Self {
-      config
-    })
+    Ok(Self {})
   }
 }
 
@@ -66,6 +85,9 @@ impl FrameHandler {
 pub struct EventHandler(pub tokio::task::JoinHandle<()>);
 
 impl EventHandler {
+  /// Spawns a new tokio task
+  ///
+  /// Wait on a crossterm event
   pub fn new(tx: tokio::sync::mpsc::UnboundedSender<AppEvent>) -> Self {
     let handle = tokio::spawn(async move {
       let mut reader = EventStream::new();

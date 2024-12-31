@@ -1,14 +1,31 @@
+use std::sync::{Arc, RwLock};
+
 use crossterm::event::KeyCode;
-use ratatui::{layout::{Alignment, Constraint, Direction, Flex, Layout}, style::{Color, Style, Stylize}, text::{Line, Span, Text}, widgets::{Block, BorderType, Clear, Paragraph}, DefaultTerminal};
-
 use opencv::prelude::*;
-
-use crate::{channel::Channel, handler::{EventHandler, FrameHandler, FrameHandlerConfig, ImageConvertType}};
 use crate::channel::AppEvent;
 
+use ratatui::{
+  layout::{Alignment, Constraint, Direction, Flex, Layout},
+  style::{Color, Style, Stylize},
+  text::{Line, Span, Text},
+  widgets::{Block, BorderType, Clear, Paragraph},
+  DefaultTerminal
+};
+
+
+use crate::{
+  channel::Channel,
+  handler::{EventHandler, FrameHandler, FrameHandlerConfig, ImageConvertType}
+};
+
+/// Camera TUI frame scale (terminal.width() / SCALE_FACTOR)
+/// Camera TUI frame scale (terminal.height() / SCALE_FACTOR)
 pub const SCALE_FACTOR: u16 = 2;
-const ASCII_CHARS: &[u8] = b"@%#*+=-:. ";
+
+/// Camera TUI frame border color
 const PRIMARY_COLOR: Color = Color::Rgb(168, 50, 62);
+
+const ASCII_CHARS: &[u8] = b"@%#*+=-:. ";
 
 pub struct App<'a> {
   // Base terminal
@@ -20,26 +37,31 @@ pub struct App<'a> {
   // Frame buffer (video buffer)
   frame_buffer: String,
 
-  // Frame handler config (for switchable image processing modes)
-  frame_handler_config: FrameHandlerConfig
+  // Frame handler config (for a switchable image proccessing modes)
+  frame_handler_config: Arc<RwLock<FrameHandlerConfig>>
 }
 
 
 impl<'a> App<'a> {
 
+  /// Try to create new app
+  ///
+  /// App includes run method (render TUI)
+  /// Try to creates a frame handler and event handler
   pub fn try_new(
     terminal: &'a mut DefaultTerminal
   ) -> Result<Self, Box<dyn std::error::Error>> {
     let mut channel = Channel::new();
+    let frame_handler_config = Arc::new(RwLock::new(FrameHandlerConfig::default()));
 
-    let _frame_handler = FrameHandler::try_new(FrameHandlerConfig::default(), channel.get_tx())?;
+    let _frame_handler = FrameHandler::try_new(frame_handler_config.clone(), channel.get_tx())?;
     let _event_handler = EventHandler::new(channel.get_tx());
 
     Ok(Self {
       terminal,
       channel,
       frame_buffer: String::new(),
-      frame_handler_config: FrameHandlerConfig::default()
+      frame_handler_config
     })
   }
 
@@ -66,9 +88,8 @@ impl<'a> App<'a> {
           },
           AppEvent::Event(key_event) => {
             match key_event.code {
-              KeyCode::Esc => {
-                break;
-              },
+              KeyCode::Char(' ') => self.switch_mode(),
+              KeyCode::Esc => break,
               _ => {}
             }
           },
@@ -127,11 +148,13 @@ impl<'a> App<'a> {
     Ok(())
   }
 
+  /// Converts a camera frame into ASCII
+  ///
+  /// Resize the frame to a smaller size
+  ///
+  /// Inserts an ASCII_CHAR based on the intensity
   pub fn convert_frame_into_ascii(&self, area_size: opencv::core::Size, frame: opencv::core::Mat) -> String {
     let mut small_frame = opencv::core::Mat::default();
-    // let mut binary_frame = opencv::core::Mat::default();
-
-    // opencv::imgproc::threshold(&frame, &mut binary_frame, 128.0, 255.0, THRESH_BINARY).unwrap();
 
     opencv::imgproc::resize(
       &frame,
@@ -156,11 +179,21 @@ impl<'a> App<'a> {
     ascii_image
   }
 
+  /// Switches a camera mode
+  ///
+  /// Startup mode: Image -> GrayScale -> ASCII
+  /// Switch: Image -> GrayScale -> Threshold ->  ASCII
   pub fn switch_mode(&mut self) {
-    if self.frame_handler_config.image_convert_type == ImageConvertType::GrayScale {
-      self.frame_handler_config.image_convert_type = ImageConvertType::Threshold
+    let image_convert_type_guard = self.frame_handler_config.read().unwrap();
+
+    let new_image_convert_type = if image_convert_type_guard.image_convert_type == ImageConvertType::GrayScale {
+      ImageConvertType::Threshold
     } else {
-      self.frame_handler_config.image_convert_type = ImageConvertType::GrayScale
-    }
+      ImageConvertType::GrayScale
+    };
+
+    drop(image_convert_type_guard);
+
+    self.frame_handler_config.write().unwrap().image_convert_type = new_image_convert_type;
   }
 }
