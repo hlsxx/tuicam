@@ -3,7 +3,7 @@ use ratatui::{layout::{Alignment, Constraint, Direction, Flex, Layout}, style::{
 
 use opencv::prelude::*;
 
-use crate::{channel::Channel, handler::{EventHandler, FrameHandler}};
+use crate::{channel::Channel, handler::{EventHandler, FrameHandler, FrameHandlerConfig, ImageConvertType}};
 use crate::channel::AppEvent;
 
 pub const SCALE_FACTOR: u16 = 2;
@@ -18,7 +18,10 @@ pub struct App<'a> {
   channel: Channel,
 
   // Frame buffer (video buffer)
-  frame_buffer: String
+  frame_buffer: String,
+
+  // Frame handler config (for switchable image processing modes)
+  frame_handler_config: FrameHandlerConfig
 }
 
 
@@ -29,13 +32,14 @@ impl<'a> App<'a> {
   ) -> Result<Self, Box<dyn std::error::Error>> {
     let mut channel = Channel::new();
 
-    let frame_handler = FrameHandler::try_new(channel.get_tx())?;
-    let event_handler = EventHandler::new(channel.get_tx());
+    let _frame_handler = FrameHandler::try_new(FrameHandlerConfig::default(), channel.get_tx())?;
+    let _event_handler = EventHandler::new(channel.get_tx());
 
     Ok(Self {
       terminal,
       channel,
-      frame_buffer: String::new()
+      frame_buffer: String::new(),
+      frame_handler_config: FrameHandlerConfig::default()
     })
   }
 
@@ -150,5 +154,13 @@ impl<'a> App<'a> {
     }
 
     ascii_image
+  }
+
+  pub fn switch_mode(&mut self) {
+    if self.frame_handler_config.image_convert_type == ImageConvertType::GrayScale {
+      self.frame_handler_config.image_convert_type = ImageConvertType::Threshold
+    } else {
+      self.frame_handler_config.image_convert_type = ImageConvertType::GrayScale
+    }
   }
 }
