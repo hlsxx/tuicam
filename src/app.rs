@@ -3,11 +3,12 @@ use ratatui::{layout::{Alignment, Constraint, Direction, Flex, Layout}, style::{
 
 use opencv::prelude::*;
 
-use crate::channel::Channel;
+use crate::{channel::Channel, handler::{EventHandler, FrameHandler}};
 use crate::channel::AppEvent;
 
 pub const SCALE_FACTOR: u16 = 2;
 const ASCII_CHARS: &[u8] = b"@%#*+=-:. ";
+const PRIMARY_COLOR: Color = Color::Rgb(168, 50, 62);
 
 pub struct App<'a> {
   // Base terminal
@@ -23,15 +24,19 @@ pub struct App<'a> {
 
 impl<'a> App<'a> {
 
-  pub fn new(
-    terminal: &'a mut DefaultTerminal,
-    channel: Channel,
-  ) -> Self {
-    Self {
+  pub fn try_new(
+    terminal: &'a mut DefaultTerminal
+  ) -> Result<Self, Box<dyn std::error::Error>> {
+    let mut channel = Channel::new();
+
+    let frame_handler = FrameHandler::try_new(channel.get_tx())?;
+    let event_handler = EventHandler::new(channel.get_tx());
+
+    Ok(Self {
       terminal,
       channel,
       frame_buffer: String::new()
-    }
+    })
   }
 
   /// Runs TUI application
@@ -40,7 +45,7 @@ impl<'a> App<'a> {
   ///
   /// Renders widgets into frames
   pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-    let primary_color = Color::Rgb(168, 50, 62);
+    self.terminal.clear()?;
 
     loop {
       let terminal_size = self.terminal.size()?;
@@ -76,7 +81,7 @@ impl<'a> App<'a> {
         let bottom_chunk = chunks[1];
 
         let block = Block::bordered()
-          .border_style(Style::default().fg(primary_color))
+          .border_style(Style::default().fg(PRIMARY_COLOR))
           .title_bottom(Line::from(" tui-cam-rs "))
           .title_style(Style::default())
           .title_alignment(Alignment::Center)
@@ -102,7 +107,7 @@ impl<'a> App<'a> {
             Span::from(" exit | "),
             Span::from("[ __ ]").bold(),
             Span::from(" switch mode")
-          ]).style(Style::default().fg(primary_color))
+          ]).style(Style::default().fg(PRIMARY_COLOR))
         ]);
 
         let tools_paragraph = Paragraph::new(tools_text)
