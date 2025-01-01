@@ -25,7 +25,7 @@ pub const SCALE_FACTOR: u16 = 2;
 /// Camera TUI frame border color
 const PRIMARY_COLOR: Color = Color::Rgb(168, 50, 62);
 
-const ASCII_CHARS: &[u8] = b"@%#*+=-:. ";
+const ASCII_CHARS: &[&str] = &["█", "▓", "▒", "░", " "];
 
 pub struct App<'a> {
   // Base terminal
@@ -153,7 +153,11 @@ impl<'a> App<'a> {
   /// Resize the frame to a smaller size
   ///
   /// Inserts an ASCII_CHAR based on the intensity
-  pub fn convert_frame_into_ascii(&self, area_size: opencv::core::Size, frame: opencv::core::Mat) -> String {
+  pub fn convert_frame_into_ascii(
+    &self,
+    area_size: opencv::core::Size,
+    frame: opencv::core::Mat
+  ) -> String {
     let mut small_frame = opencv::core::Mat::default();
 
     opencv::imgproc::resize(
@@ -164,13 +168,19 @@ impl<'a> App<'a> {
 
     let mut ascii_image = String::new();
 
+    let image_convert_type_guard = self.frame_handler_config.read().unwrap();
+
     for y in 0..small_frame.rows() {
       for x in 0..small_frame.cols() {
         let intensity = small_frame.at_2d::<u8>(y, x).unwrap();
-        let char_index = (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
-        let ascii_char = ASCII_CHARS[char_index] as char;
+        let ascii_char = if image_convert_type_guard.image_convert_type == ImageConvertType::Threshold {
+          if *intensity > 150 { "█" } else { " " }
+        } else {
+          let char_index = (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
+          ASCII_CHARS[char_index]
+        };
 
-        ascii_image.push(ascii_char);
+        ascii_image.push_str(ascii_char);
       }
 
       ascii_image.push_str("\n");

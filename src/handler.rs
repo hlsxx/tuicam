@@ -72,7 +72,10 @@ impl FrameHandler {
           gray_frame
         };
 
-        tx.send(AppEvent::Frame(res_frame)).unwrap();
+        if tx.send(AppEvent::Frame(res_frame)).is_err() {
+          break;
+        }
+
         interval.tick().await;
       }
     });
