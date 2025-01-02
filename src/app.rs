@@ -25,7 +25,7 @@ pub const SCALE_FACTOR: u16 = 2;
 /// Camera TUI frame border color
 const PRIMARY_COLOR: Color = Color::Rgb(168, 50, 62);
 
-const ASCII_CHARS: &[&str] = &["█", "▓", "▒", "░", " "];
+const ASCII_CHARS: &[char] = &['█', '▓', '▒', '░', ' '];
 
 pub struct App<'a> {
   // Base terminal
@@ -174,13 +174,13 @@ impl<'a> App<'a> {
       for x in 0..small_frame.cols() {
         let intensity = small_frame.at_2d::<u8>(y, x).unwrap();
         let ascii_char = if image_convert_type_guard.image_convert_type == ImageConvertType::Threshold {
-          if *intensity > 150 { "█" } else { " " }
+          if *intensity > 150 { '█' } else { ' ' }
         } else {
           let char_index = (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
           ASCII_CHARS[char_index]
         };
 
-        ascii_image.push_str(ascii_char);
+        ascii_image.push(ascii_char);
       }
 
       ascii_image.push_str("\n");
