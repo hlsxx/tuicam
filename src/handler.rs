@@ -3,7 +3,7 @@ use std::{
   time::Duration
 };
 
-use crossterm::event::{EventStream, Event};
+use crossterm::event::{Event, EventStream};
 use futures::{FutureExt, StreamExt};
 use ratatui::layout::Size;
 use tokio::sync::RwLock;
@@ -17,6 +17,7 @@ use crate::app::ASCII_CHARS;
 type TerminalSize = (u16, u16);
 
 #[derive(Eq, PartialEq)]
+#[allow(unused)]
 pub enum ImageConvertType {
   Colorful,
   GrayScale,
@@ -112,7 +113,10 @@ impl FrameHandler {
         opencv::imgproc::resize(
           &frame,
           &mut small_frame,
-          cam_size, 0.0, 0.0, opencv::imgproc::INTER_LINEAR
+          cam_size,
+          0.0,
+          0.0,
+          opencv::imgproc::INTER_LINEAR
         ).unwrap();
 
         let res_frame = match config.image_convert_type {
