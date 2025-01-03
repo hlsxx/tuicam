@@ -1,7 +1,6 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
-use crossterm::event::KeyCode;
-use opencv::prelude::*;
 use crate::channel::AppEvent;
 
 use ratatui::{
@@ -9,6 +8,7 @@ use ratatui::{
   style::{Color, Style, Stylize},
   text::{Line, Span, Text},
   widgets::{Block, BorderType, Clear, Paragraph},
+  crossterm::event::KeyCode,
   DefaultTerminal
 };
 
@@ -52,7 +52,11 @@ impl<'a> App<'a> {
     terminal: &'a mut DefaultTerminal
   ) -> Result<Self, Box<dyn std::error::Error>> {
     let mut channel = Channel::new();
-    let frame_handler_config = Arc::new(RwLock::new(FrameHandlerConfig::default()));
+    let terminal_size = terminal.size()?;
+
+    let frame_handler_config = Arc::new(RwLock::new(
+      FrameHandlerConfig::new(terminal_size))
+    );
 
     let _frame_handler = FrameHandler::try_new(frame_handler_config.clone(), channel.get_tx())?;
     let _event_handler = EventHandler::new(channel.get_tx());
@@ -81,13 +85,13 @@ impl<'a> App<'a> {
           AppEvent::AsciiFrame(ascii_frame) => self.frame_buffer = ascii_frame,
           AppEvent::Event(key_event) => {
             match key_event.code {
-              KeyCode::Char(' ') => self.switch_mode(),
+              KeyCode::Char(' ') => self.switch_mode().await,
               KeyCode::Esc => break,
               _ => {}
             }
           },
           AppEvent::TerminalResize((width, height)) => {
-            self.frame_handler_config.write().unwrap().terminal_size = (width, height);
+            self.frame_handler_config.write().await.terminal_size = (width, height);
           }
         }
       }
@@ -148,8 +152,8 @@ impl<'a> App<'a> {
   ///
   /// Startup mode: Image -> GrayScale -> ASCII
   /// Switch: Image -> GrayScale -> Threshold ->  ASCII
-  pub fn switch_mode(&mut self) {
-    let image_convert_type_guard = self.frame_handler_config.read().unwrap();
+  pub async fn switch_mode(&mut self) {
+    let image_convert_type_guard = self.frame_handler_config.read().await;
 
     let new_image_convert_type = if image_convert_type_guard.image_convert_type == ImageConvertType::GrayScale {
       ImageConvertType::Threshold
@@ -159,6 +163,6 @@ impl<'a> App<'a> {
 
     drop(image_convert_type_guard);
 
-    self.frame_handler_config.write().unwrap().image_convert_type = new_image_convert_type;
+    self.frame_handler_config.write().await.image_convert_type = new_image_convert_type;
   }
 }

@@ -1,10 +1,12 @@
 use std::{
-  sync::{Arc, RwLock},
+  sync::Arc,
   time::Duration
 };
 
 use crossterm::event::{EventStream, Event};
 use futures::{FutureExt, StreamExt};
+use ratatui::layout::Size;
+use tokio::sync::RwLock;
 
 use opencv::{prelude::*, imgproc, videoio::{self, VideoCapture, VideoCaptureTrait}};
 
@@ -30,11 +32,11 @@ pub struct FrameHandlerConfig {
   pub terminal_size: TerminalSize
 }
 
-impl Default for FrameHandlerConfig {
-  fn default() -> Self {
+impl FrameHandlerConfig {
+  pub fn new(terminal_size: Size) -> Self {
     Self {
       image_convert_type: ImageConvertType::GrayScale,
-      terminal_size: (100, 100)
+      terminal_size: (terminal_size.width, terminal_size.height)
     }
   }
 }
@@ -51,21 +53,19 @@ fn convert_into_grayscale(frame: &opencv::core::Mat, res_frame: &mut opencv::cor
 /// Inserts an ASCII_CHAR based on the intensity
 pub fn convert_frame_into_ascii(
   frame: opencv::core::Mat,
-  // image_convert_type: &ImageConvertType
+  image_convert_type: &ImageConvertType
 ) -> String {
   let mut ascii_image = String::new();
 
   for y in 0..frame.rows() {
     for x in 0..frame.cols() {
       let intensity = frame.at_2d::<u8>(y, x).unwrap();
-      // let ascii_char = if *image_convert_type == ImageConvertType::Threshold {
-      //   if *intensity > 150 { '█' } else { ' ' }
-      // } else {
-      let ascii_char = {
+      let ascii_char = if *image_convert_type == ImageConvertType::Threshold {
+        if *intensity > 150 { '█' } else { ' ' }
+      } else {
         let char_index = (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
         ASCII_CHARS[char_index]
       };
-      // };
 
       ascii_image.push(ascii_char);
     }
@@ -102,13 +102,11 @@ impl FrameHandler {
 
         let mut small_frame = opencv::core::Mat::default();
 
-        let cam_size = {
-          let terminal_size = config.read().unwrap().terminal_size;
+        let config = config.read().await;
 
-          opencv::core::Size {
-            width: (terminal_size.0 / SCALE_FACTOR) as i32,
-            height: (terminal_size.1 / SCALE_FACTOR) as i32
-          }
+        let cam_size = opencv::core::Size {
+          width: (config.terminal_size.0 / SCALE_FACTOR) as i32,
+          height: (config.terminal_size.1 / SCALE_FACTOR) as i32
         };
 
         opencv::imgproc::resize(
@@ -117,7 +115,7 @@ impl FrameHandler {
           cam_size, 0.0, 0.0, opencv::imgproc::INTER_LINEAR
         ).unwrap();
 
-        let res_frame = match config.read().unwrap().image_convert_type {
+        let res_frame = match config.image_convert_type {
           ImageConvertType::Colorful => small_frame.clone(),
           ImageConvertType::GrayScale => {
             let mut gray_frame = opencv::core::Mat::default();
@@ -141,7 +139,7 @@ impl FrameHandler {
           }
         };
 
-        let ascii_frame = convert_frame_into_ascii(res_frame);
+        let ascii_frame = convert_frame_into_ascii(res_frame, &config.image_convert_type);
 
         if tx.send(AppEvent::AsciiFrame(ascii_frame)).is_err() {
           break;
