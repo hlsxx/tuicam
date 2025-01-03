@@ -5,7 +5,7 @@ use std::{
 
 use crossterm::event::{Event, EventStream};
 use futures::{FutureExt, StreamExt};
-use ratatui::layout::Size;
+use ratatui::{layout::Size, style::Style, text::{Line, Span, Text}};
 use tokio::sync::RwLock;
 
 use opencv::{prelude::*, imgproc, videoio::{self, VideoCapture, VideoCaptureTrait}};
@@ -16,7 +16,7 @@ use crate::app::ASCII_CHARS;
 
 type TerminalSize = (u16, u16);
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Clone)]
 #[allow(unused)]
 pub enum ImageConvertType {
   Colorful,
@@ -54,27 +54,33 @@ fn convert_into_grayscale(frame: &opencv::core::Mat, res_frame: &mut opencv::cor
 /// Inserts an ASCII_CHAR based on the intensity
 pub fn convert_frame_into_ascii(
   frame: opencv::core::Mat,
-  image_convert_type: &ImageConvertType
-) -> String {
-  let mut ascii_image = String::new();
+  image_convert_type: ImageConvertType
+) -> Text<'static> {
+  let mut lines = Vec::new();
+  // let mut ascii_image = Vec::new();
 
   for y in 0..frame.rows() {
+    let mut spans = Vec::new();
+
     for x in 0..frame.cols() {
       let intensity = frame.at_2d::<u8>(y, x).unwrap();
-      let ascii_char = if *image_convert_type == ImageConvertType::Threshold {
+      let ascii_char = if image_convert_type == ImageConvertType::Threshold {
         if *intensity > 150 { '█' } else { ' ' }
       } else {
         let char_index = (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
         ASCII_CHARS[char_index]
       };
 
-      ascii_image.push(ascii_char);
+      spans.push(
+        Span::from(ascii_char.to_string())
+        .style(Style::default().fg(ratatui::style::Color::Rgb(50, 50, 100)))
+      );
     }
 
-    ascii_image.push_str("\n");
+    lines.push(Line::from(spans));
   }
 
-  ascii_image
+  Text::from(lines)
 }
 
 
@@ -143,7 +149,7 @@ impl FrameHandler {
           }
         };
 
-        let ascii_frame = convert_frame_into_ascii(res_frame, &config.image_convert_type);
+        let ascii_frame = convert_frame_into_ascii(res_frame, config.image_convert_type.clone());
 
         if tx.send(AppEvent::AsciiFrame(ascii_frame)).is_err() {
           break;

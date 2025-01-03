@@ -1,8 +1,8 @@
-use ratatui::crossterm::event::KeyEvent;
+use ratatui::{crossterm::event::KeyEvent, text::Text};
 
 pub enum AppEvent {
   // OpenCV mat (camera video frame)
-  AsciiFrame(String),
+  AsciiFrame(Text<'static>),
 
   // Crossterm KeyEvent
   Event(KeyEvent),

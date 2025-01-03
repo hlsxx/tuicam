@@ -35,7 +35,7 @@ pub struct App<'a> {
   channel: Channel,
 
   // Frame buffer (video buffer)
-  frame_buffer: String,
+  frame_buffer: Text<'static>,
 
   // Frame handler config (for a switchable image proccessing modes)
   frame_handler_config: Arc<RwLock<FrameHandlerConfig>>
@@ -64,7 +64,7 @@ impl<'a> App<'a> {
     Ok(Self {
       terminal,
       channel,
-      frame_buffer: String::new(),
+      frame_buffer: Text::default(),
       frame_handler_config
     })
   }
