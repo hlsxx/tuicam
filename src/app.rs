@@ -25,7 +25,7 @@ pub const SCALE_FACTOR: u16 = 2;
 /// Camera TUI frame border color
 const PRIMARY_COLOR: Color = Color::Rgb(168, 50, 62);
 
-const ASCII_CHARS: &[char] = &['█', '▓', '▒', '░', ' '];
+pub const ASCII_CHARS: &[char] = &['█', '▓', '▒', '░', ' '];
 
 pub struct App<'a> {
   // Base terminal
@@ -78,14 +78,7 @@ impl<'a> App<'a> {
 
       if let Some(app_event) = self.channel.next().await {
         match app_event {
-          AppEvent::Frame(frame) => {
-            let image_size = opencv::core::Size {
-              width: (terminal_size.width / SCALE_FACTOR) as i32,
-              height: (terminal_size.height / SCALE_FACTOR) as i32
-            };
-
-            self.frame_buffer = self.convert_frame_into_ascii(image_size, frame);
-          },
+          AppEvent::AsciiFrame(ascii_frame) => self.frame_buffer = ascii_frame,
           AppEvent::Event(key_event) => {
             match key_event.code {
               KeyCode::Char(' ') => self.switch_mode(),
@@ -93,6 +86,9 @@ impl<'a> App<'a> {
               _ => {}
             }
           },
+          AppEvent::TerminalResize((width, height)) => {
+            self.frame_handler_config.write().unwrap().terminal_size = (width, height);
+          }
         }
       }
 
@@ -146,47 +142,6 @@ impl<'a> App<'a> {
     }
 
     Ok(())
-  }
-
-  /// Converts a camera frame into ASCII
-  ///
-  /// Resize the frame to a smaller size
-  ///
-  /// Inserts an ASCII_CHAR based on the intensity
-  pub fn convert_frame_into_ascii(
-    &self,
-    area_size: opencv::core::Size,
-    frame: opencv::core::Mat
-  ) -> String {
-    let mut small_frame = opencv::core::Mat::default();
-
-    opencv::imgproc::resize(
-      &frame,
-      &mut small_frame,
-      area_size, 0.0, 0.0, opencv::imgproc::INTER_LINEAR
-    ).unwrap();
-
-    let mut ascii_image = String::new();
-
-    let image_convert_type_guard = self.frame_handler_config.read().unwrap();
-
-    for y in 0..small_frame.rows() {
-      for x in 0..small_frame.cols() {
-        let intensity = small_frame.at_2d::<u8>(y, x).unwrap();
-        let ascii_char = if image_convert_type_guard.image_convert_type == ImageConvertType::Threshold {
-          if *intensity > 150 { '█' } else { ' ' }
-        } else {
-          let char_index = (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
-          ASCII_CHARS[char_index]
-        };
-
-        ascii_image.push(ascii_char);
-      }
-
-      ascii_image.push_str("\n");
-    }
-
-    ascii_image
   }
 
   /// Switches a camera mode

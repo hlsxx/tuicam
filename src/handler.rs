@@ -6,12 +6,17 @@ use std::{
 use crossterm::event::{EventStream, Event};
 use futures::{FutureExt, StreamExt};
 
-use opencv::{imgproc, videoio::{self, VideoCapture, VideoCaptureTrait}};
+use opencv::{prelude::*, imgproc, videoio::{self, VideoCapture, VideoCaptureTrait}};
 
 use crate::channel::AppEvent;
+use crate::app::SCALE_FACTOR;
+use crate::app::ASCII_CHARS;
+
+type TerminalSize = (u16, u16);
 
 #[derive(Eq, PartialEq)]
 pub enum ImageConvertType {
+  Colorful,
   GrayScale,
   Threshold
 }
@@ -19,16 +24,58 @@ pub enum ImageConvertType {
 /// Frame handler config
 pub struct FrameHandlerConfig {
   /// Image convert type (camera mode)
-  pub image_convert_type: ImageConvertType
+  pub image_convert_type: ImageConvertType,
+
+  /// Terminal size (widht, height)
+  pub terminal_size: TerminalSize
 }
 
 impl Default for FrameHandlerConfig {
   fn default() -> Self {
     Self {
-      image_convert_type: ImageConvertType::GrayScale
+      image_convert_type: ImageConvertType::GrayScale,
+      terminal_size: (100, 100)
     }
   }
 }
+
+/// Converts a frame into a grayscale
+fn convert_into_grayscale(frame: &opencv::core::Mat, res_frame: &mut opencv::core::Mat) {
+  imgproc::cvt_color(frame, res_frame, imgproc::COLOR_BGR2GRAY, 0).unwrap()
+}
+
+/// Converts a camera frame into ASCII
+///
+/// Resize the frame to a smaller size
+///
+/// Inserts an ASCII_CHAR based on the intensity
+pub fn convert_frame_into_ascii(
+  frame: opencv::core::Mat,
+  // image_convert_type: &ImageConvertType
+) -> String {
+  let mut ascii_image = String::new();
+
+  for y in 0..frame.rows() {
+    for x in 0..frame.cols() {
+      let intensity = frame.at_2d::<u8>(y, x).unwrap();
+      // let ascii_char = if *image_convert_type == ImageConvertType::Threshold {
+      //   if *intensity > 150 { '█' } else { ' ' }
+      // } else {
+      let ascii_char = {
+        let char_index = (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
+        ASCII_CHARS[char_index]
+      };
+      // };
+
+      ascii_image.push(ascii_char);
+    }
+
+    ascii_image.push_str("\n");
+  }
+
+  ascii_image
+}
+
 
 #[allow(unused)]
 pub struct FrameHandler;
@@ -53,26 +100,50 @@ impl FrameHandler {
       loop {
         cam.read(&mut frame).unwrap();
 
-        let mut gray_frame = opencv::core::Mat::default();
+        let mut small_frame = opencv::core::Mat::default();
 
-        imgproc::cvt_color(&frame, &mut gray_frame, imgproc::COLOR_BGR2GRAY, 0).unwrap();
+        let cam_size = {
+          let terminal_size = config.read().unwrap().terminal_size;
 
-        let res_frame = if config.read().unwrap().image_convert_type == ImageConvertType::Threshold {
-          let mut binary_frame = opencv::core::Mat::default();
-
-          imgproc::threshold(
-            &gray_frame,
-            &mut binary_frame,
-            128.0, 255.0,
-            imgproc::THRESH_BINARY
-          ).unwrap();
-
-          binary_frame
-        } else {
-          gray_frame
+          opencv::core::Size {
+            width: (terminal_size.0 / SCALE_FACTOR) as i32,
+            height: (terminal_size.1 / SCALE_FACTOR) as i32
+          }
         };
 
-        if tx.send(AppEvent::Frame(res_frame)).is_err() {
+        opencv::imgproc::resize(
+          &frame,
+          &mut small_frame,
+          cam_size, 0.0, 0.0, opencv::imgproc::INTER_LINEAR
+        ).unwrap();
+
+        let res_frame = match config.read().unwrap().image_convert_type {
+          ImageConvertType::Colorful => small_frame.clone(),
+          ImageConvertType::GrayScale => {
+            let mut gray_frame = opencv::core::Mat::default();
+            convert_into_grayscale(&small_frame, &mut gray_frame);
+            gray_frame
+          },
+          ImageConvertType::Threshold => {
+            let mut gray_frame = opencv::core::Mat::default();
+            let mut binary_frame = opencv::core::Mat::default();
+
+            convert_into_grayscale(&small_frame, &mut gray_frame);
+
+            imgproc::threshold(
+              &gray_frame,
+              &mut binary_frame,
+              128.0, 255.0,
+              imgproc::THRESH_BINARY
+            ).unwrap();
+
+            binary_frame
+          }
+        };
+
+        let ascii_frame = convert_frame_into_ascii(res_frame);
+
+        if tx.send(AppEvent::AsciiFrame(ascii_frame)).is_err() {
           break;
         }
 
@@ -101,6 +172,7 @@ impl EventHandler {
         if let Some(Ok(event)) = crossterm_event {
           match event {
             Event::Key(key_code) => tx.send(AppEvent::Event(key_code)).unwrap(),
+            Event::Resize(width, height) => tx.send(AppEvent::TerminalResize((width, height))).unwrap(),
             _ => {}
           }
         }

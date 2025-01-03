@@ -1,11 +1,14 @@
-use crossterm::event::KeyEvent;
+use ratatui::crossterm::event::KeyEvent;
 
 pub enum AppEvent {
   // OpenCV mat (camera video frame)
-  Frame(opencv::core::Mat),
+  AsciiFrame(String),
 
-  // Crossterm event
-  Event(KeyEvent)
+  // Crossterm KeyEvent
+  Event(KeyEvent),
+
+  // Crossterm Resize Event
+  TerminalResize((u16, u16))
 }
 
 pub struct Channel {
