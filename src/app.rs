@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::channel::AppEvent;
+use crate::{channel::AppEvent, handler::CamWindowScale};
 
 use ratatui::{
   layout::{Alignment, Constraint, Direction, Flex, Layout},
@@ -12,15 +12,10 @@ use ratatui::{
   DefaultTerminal
 };
 
-
 use crate::{
   channel::Channel,
   handler::{EventHandler, FrameHandler, FrameHandlerConfig, ImageConvertType}
 };
-
-/// Camera TUI frame scale (terminal.width() / SCALE_FACTOR)
-/// Camera TUI frame scale (terminal.height() / SCALE_FACTOR)
-pub const SCALE_FACTOR: u16 = 2;
 
 /// Camera TUI frame border color
 const PRIMARY_COLOR: Color = Color::Rgb(168, 50, 62);
@@ -86,6 +81,7 @@ impl<'a> App<'a> {
           AppEvent::Event(key_event) => {
             match key_event.code {
               KeyCode::Char(' ') => self.switch_mode().await,
+              KeyCode::Char('f') => self.switch_cam_window_scale().await,
               KeyCode::Esc => break,
               _ => {}
             }
@@ -95,6 +91,9 @@ impl<'a> App<'a> {
           }
         }
       }
+
+      let cam_window_scale = self.frame_handler_config.read().await
+        .cam_window_scale.clone() as u16;
 
       self.terminal.draw(|frame| {
         let area = frame.area();
@@ -117,11 +116,13 @@ impl<'a> App<'a> {
           .alignment(Alignment::Center)
           .centered();
 
-        let horizontal = Layout::horizontal([Constraint::Length(terminal_size.width / SCALE_FACTOR)])
-          .flex(Flex::Center);
+        let horizontal = Layout::horizontal([
+          Constraint::Length(terminal_size.width / cam_window_scale)
+        ]).flex(Flex::Center);
 
-        let vertical = Layout::vertical([Constraint::Length(terminal_size.height / SCALE_FACTOR)])
-          .flex(Flex::Center);
+        let vertical = Layout::vertical([
+          Constraint::Length(terminal_size.height / cam_window_scale)
+        ]).flex(Flex::Center);
 
         let [top_chunk] = vertical.areas(top_chunk);
         let [top_chunk] = horizontal.areas(top_chunk);
@@ -131,7 +132,9 @@ impl<'a> App<'a> {
             Span::from("ESC").bold(),
             Span::from(" exit | "),
             Span::from("[ __ ]").bold(),
-            Span::from(" switch mode")
+            Span::from(" switch mode | "),
+            Span::from("f").bold(),
+            Span::from(" toggle fullscreen")
           ]).style(Style::default().fg(PRIMARY_COLOR))
         ]);
 
@@ -148,21 +151,30 @@ impl<'a> App<'a> {
     Ok(())
   }
 
-  /// Switches a camera mode
+  /// Switches a camera mode.
   ///
   /// Startup mode: Image -> GrayScale -> ASCII
   /// Switch: Image -> GrayScale -> Threshold ->  ASCII
   pub async fn switch_mode(&mut self) {
-    let image_convert_type_guard = self.frame_handler_config.read().await;
-
-    let new_image_convert_type = if image_convert_type_guard.image_convert_type == ImageConvertType::GrayScale {
-      ImageConvertType::Threshold
-    } else {
-      ImageConvertType::GrayScale
+    let new_image_convert_type = match self.frame_handler_config.read().await.image_convert_type {
+      ImageConvertType::Colorful => ImageConvertType::GrayScale,
+      ImageConvertType::GrayScale => ImageConvertType::Threshold,
+      ImageConvertType::Threshold => ImageConvertType::Colorful
     };
 
-    drop(image_convert_type_guard);
-
     self.frame_handler_config.write().await.image_convert_type = new_image_convert_type;
+  }
+
+  /// Switches a camera window scale.
+  ///
+  /// Startup mode: Small
+  /// Switch: Full
+  pub async fn switch_cam_window_scale(&mut self) {
+    let cam_window_scale = match self.frame_handler_config.read().await.cam_window_scale {
+      CamWindowScale::Small => CamWindowScale::Full,
+      CamWindowScale::Full => CamWindowScale::Small
+    };
+
+    self.frame_handler_config.write().await.cam_window_scale = cam_window_scale;
   }
 }

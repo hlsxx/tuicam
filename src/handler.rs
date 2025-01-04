@@ -5,13 +5,12 @@ use std::{
 
 use crossterm::event::{Event, EventStream};
 use futures::{FutureExt, StreamExt};
-use ratatui::{layout::Size, style::Style, text::{Line, Span, Text}};
+use ratatui::{layout::Size, style::{Color, Style}, text::{Line, Span, Text}};
 use tokio::sync::RwLock;
 
 use opencv::{prelude::*, imgproc, videoio::{self, VideoCapture, VideoCaptureTrait}};
 
 use crate::channel::AppEvent;
-use crate::app::SCALE_FACTOR;
 use crate::app::ASCII_CHARS;
 
 type TerminalSize = (u16, u16);
@@ -24,56 +23,75 @@ pub enum ImageConvertType {
   Threshold
 }
 
+/// Camera window frame scale
+#[derive(Clone)]
+pub enum CamWindowScale {
+  Full = 1,
+  Small = 2,
+}
+
 /// Frame handler config
 pub struct FrameHandlerConfig {
   /// Image convert type (camera mode)
   pub image_convert_type: ImageConvertType,
 
-  /// Terminal size (widht, height)
-  pub terminal_size: TerminalSize
+  /// Terminal size (width, height)
+  pub terminal_size: TerminalSize,
+
+  /// 
+  pub cam_window_scale: CamWindowScale
 }
 
 impl FrameHandlerConfig {
   pub fn new(terminal_size: Size) -> Self {
     Self {
-      image_convert_type: ImageConvertType::GrayScale,
-      terminal_size: (terminal_size.width, terminal_size.height)
+      image_convert_type: ImageConvertType::Colorful,
+      terminal_size: (terminal_size.width, terminal_size.height),
+      cam_window_scale: CamWindowScale::Small
     }
   }
 }
 
-/// Converts a frame into a grayscale
+/// Converts a frame into a grayscale.
 fn convert_into_grayscale(frame: &opencv::core::Mat, res_frame: &mut opencv::core::Mat) {
   imgproc::cvt_color(frame, res_frame, imgproc::COLOR_BGR2GRAY, 0).unwrap()
 }
 
-/// Converts a camera frame into ASCII
+/// Converts a camera frame into ASCII frame.
 ///
-/// Resize the frame to a smaller size
-///
-/// Inserts an ASCII_CHAR based on the intensity
+/// This method resizes the frame to a smaller size and then converts each pixel
+/// into an ASCII character based on its intensity. The intensity is calculated
+/// from the pixel's RGB values (Colorful), and the corresponding ASCII character is inserted
+/// based on that intensity.
 pub fn convert_frame_into_ascii(
   frame: opencv::core::Mat,
   image_convert_type: ImageConvertType
 ) -> Text<'static> {
   let mut lines = Vec::new();
-  // let mut ascii_image = Vec::new();
 
   for y in 0..frame.rows() {
     let mut spans = Vec::new();
-
     for x in 0..frame.cols() {
-      let intensity = frame.at_2d::<u8>(y, x).unwrap();
-      let ascii_char = if image_convert_type == ImageConvertType::Threshold {
-        if *intensity > 150 { '█' } else { ' ' }
+      let (intensity, color) = if image_convert_type == ImageConvertType::Colorful {
+        let pixel = frame.at_2d::<opencv::core::Vec3b>(y, x).unwrap();
+        let (r, g, b) = (pixel[0], pixel[1], pixel[2]);
+        let intensity = (0.2989 * r as f32 + 0.5870 * g as f32 + 0.1140 * b as f32) as u8;
+        (intensity, Color::Rgb(r, g, b))
       } else {
-        let char_index = (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
+        let intensity = frame.at_2d::<u8>(y, x).unwrap();
+        (*intensity, Color::Rgb(255, 255, 255))
+      };
+
+      let ascii_char = if image_convert_type == ImageConvertType::Threshold {
+        if intensity > 150 { '█' } else { ' ' }
+      } else {
+        let char_index = (intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
         ASCII_CHARS[char_index]
       };
 
       spans.push(
         Span::from(ascii_char.to_string())
-        .style(Style::default().fg(ratatui::style::Color::Rgb(50, 50, 100)))
+        .style(Style::default().fg(color))
       );
     }
 
@@ -84,15 +102,14 @@ pub fn convert_frame_into_ascii(
 }
 
 
-#[allow(unused)]
 pub struct FrameHandler;
 
 impl FrameHandler {
-  /// Spawns a new tokio task
-  ///
-  /// Opens a device camera
-  ///
-  /// Converts image into a grayscale image
+
+  /// Spawns a new Tokio task.
+  /// 
+  /// This task opens a device camera, captures a frame, and resizes the image.
+  /// If frame is a GrayScale or Threshold converts into approriate format
   pub fn try_new(
     config: Arc<RwLock<FrameHandlerConfig>>,
     tx: tokio::sync::mpsc::UnboundedSender<AppEvent>
@@ -112,8 +129,8 @@ impl FrameHandler {
         let config = config.read().await;
 
         let cam_size = opencv::core::Size {
-          width: (config.terminal_size.0 / SCALE_FACTOR) as i32,
-          height: (config.terminal_size.1 / SCALE_FACTOR) as i32
+          width: (config.terminal_size.0 / config.cam_window_scale.clone() as u16) as i32,
+          height: (config.terminal_size.1 / config.cam_window_scale.clone() as u16) as i32
         };
 
         opencv::imgproc::resize(
@@ -149,12 +166,12 @@ impl FrameHandler {
           }
         };
 
-        let ascii_frame = convert_frame_into_ascii(res_frame, config.image_convert_type.clone());
+        let ascii_frame = convert_frame_into_ascii(
+          res_frame,
+          config.image_convert_type.clone()
+        );
 
-        if tx.send(AppEvent::AsciiFrame(ascii_frame)).is_err() {
-          break;
-        }
-
+        if tx.send(AppEvent::AsciiFrame(ascii_frame)).is_err() { break; }
         interval.tick().await;
       }
     });
@@ -167,9 +184,10 @@ impl FrameHandler {
 pub struct EventHandler(pub tokio::task::JoinHandle<()>);
 
 impl EventHandler {
-  /// Spawns a new tokio task
+  /// Spawns a new Tokio task.
   ///
-  /// Wait on a crossterm event
+  /// This task waits on the Crossbeam event occur.
+  /// The event consists of either a key event or a resize event.
   pub fn new(tx: tokio::sync::mpsc::UnboundedSender<AppEvent>) -> Self {
     let handle = tokio::spawn(async move {
       let mut reader = EventStream::new();
