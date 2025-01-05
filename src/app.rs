@@ -106,7 +106,6 @@ impl<'a> App<'a> {
 
         let block = Block::bordered()
           .border_style(Style::default().fg(PRIMARY_COLOR))
-          .title_bottom(Line::from(" tui-cam-rs "))
           .title_style(Style::default())
           .title_alignment(Alignment::Center)
           .border_type(BorderType::Rounded);
