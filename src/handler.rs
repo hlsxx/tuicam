@@ -74,7 +74,7 @@ pub fn convert_frame_into_ascii(
     for x in 0..frame.cols() {
       let (intensity, color) = if image_convert_type == ImageConvertType::Colorful {
         let pixel = frame.at_2d::<opencv::core::Vec3b>(y, x).unwrap();
-        let (r, g, b) = (pixel[0], pixel[1], pixel[2]);
+        let (b, g, r) = (pixel[0], pixel[1], pixel[2]);
         let intensity = (0.2989 * r as f32 + 0.5870 * g as f32 + 0.1140 * b as f32) as u8;
         (intensity, Color::Rgb(r, g, b))
       } else {
