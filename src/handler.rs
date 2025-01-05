@@ -72,21 +72,21 @@ pub fn convert_frame_into_ascii(
   for y in 0..frame.rows() {
     let mut spans = Vec::new();
     for x in 0..frame.cols() {
-      let (intensity, color) = if image_convert_type == ImageConvertType::Colorful {
-        let pixel = frame.at_2d::<opencv::core::Vec3b>(y, x).unwrap();
-        let (b, g, r) = (pixel[0], pixel[1], pixel[2]);
-        let intensity = (0.2989 * r as f32 + 0.5870 * g as f32 + 0.1140 * b as f32) as u8;
-        (intensity, Color::Rgb(r, g, b))
-      } else {
-        let intensity = frame.at_2d::<u8>(y, x).unwrap();
-        (*intensity, Color::Rgb(255, 255, 255))
-      };
+      let (ascii_char, color) = match image_convert_type {
+        ImageConvertType::Colorful => {
+          let pixel = frame.at_2d::<opencv::core::Vec3b>(y, x).unwrap();
+          ('█', Color::Rgb(pixel[2], pixel[1], pixel[0]))
+        },
+        ImageConvertType::GrayScale => {
+          let intensity = frame.at_2d::<u8>(y, x).unwrap();
+          let char_index = (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
 
-      let ascii_char = if image_convert_type == ImageConvertType::Threshold {
-        if intensity > 150 { '█' } else { ' ' }
-      } else {
-        let char_index = (intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
-        ASCII_CHARS[char_index]
+          (ASCII_CHARS[char_index], Color::Rgb(255, 255, 255))
+        },
+        ImageConvertType::Threshold => {
+          let intensity = frame.at_2d::<u8>(y, x).unwrap();
+          (if *intensity > 150 { '█' } else { ' ' }, Color::Rgb(255, 255, 255))
+        }
       };
 
       spans.push(
@@ -114,7 +114,7 @@ impl FrameHandler {
     config: Arc<RwLock<FrameHandlerConfig>>,
     tx: tokio::sync::mpsc::UnboundedSender<AppEvent>
   ) -> opencv::Result<Self> {
-    let mut cam = VideoCapture::new(0, videoio::CAP_ANY)?;
+    let mut cam = VideoCapture::new(4, videoio::CAP_ANY)?;
     let mut frame = opencv::core::Mat::default();
 
     let _handle = tokio::spawn(async move {
