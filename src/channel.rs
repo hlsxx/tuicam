@@ -8,7 +8,7 @@ pub enum AppEvent {
   Event(KeyEvent),
 
   // Crossterm Resize Event
-  TerminalResize((u16, u16))
+  TerminalResize((u16, u16)),
 }
 
 pub struct Channel {
@@ -20,15 +20,11 @@ pub struct Channel {
 }
 
 impl Channel {
-
   /// Creates a unbounded channel
   pub fn new() -> Self {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<AppEvent>();
 
-    Self {
-      tx,
-      rx
-    }
+    Self { tx, rx }
   }
 
   /// Returns transceiver

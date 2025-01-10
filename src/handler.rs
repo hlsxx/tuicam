@@ -1,17 +1,22 @@
-use std::{
-  sync::Arc,
-  time::Duration
-};
+use std::{sync::Arc, time::Duration};
 
 use crossterm::event::{Event, EventStream};
 use futures::{FutureExt, StreamExt};
-use ratatui::{layout::Size, style::{Color, Style}, text::{Line, Span, Text}};
+use ratatui::{
+  layout::Size,
+  style::{Color, Style},
+  text::{Line, Span, Text},
+};
 use tokio::sync::RwLock;
 
-use opencv::{prelude::*, imgproc, videoio::{self, VideoCapture, VideoCaptureTrait}};
+use opencv::{
+  imgproc,
+  prelude::*,
+  videoio::{self, VideoCapture, VideoCaptureTrait},
+};
 
-use crate::channel::AppEvent;
 use crate::app::ASCII_CHARS;
+use crate::channel::AppEvent;
 
 type TerminalSize = (u16, u16);
 
@@ -20,7 +25,7 @@ type TerminalSize = (u16, u16);
 pub enum ImageConvertType {
   Colorful,
   GrayScale,
-  Threshold
+  Threshold,
 }
 
 /// Camera window frame scale
@@ -28,6 +33,38 @@ pub enum ImageConvertType {
 pub enum CamWindowScale {
   Full = 1,
   Small = 2,
+}
+
+/// Camera contains all available device cameras
+pub struct Camera {
+  active_index: Option<i32>,
+  ids: Vec<i32>
+}
+
+impl Camera {
+  pub fn default() -> Self {
+    let ids = (0..=10).filter_map(|id| {
+      if let Ok(cam) = VideoCapture::new(id, videoio::CAP_ANY) {
+        if cam.is_opened().unwrap_or(false) {
+          return Some(id);
+        } else {
+          return None;
+        }
+      }
+
+      None
+    }).collect::<Vec<i32>>();
+
+    Self {
+      active_index: ids.get(0).copied(),
+      ids
+    }
+  }
+
+  /// Switches current camera
+  pub fn switch(&mut self) {
+    
+  }
 }
 
 /// Frame handler config
@@ -38,8 +75,11 @@ pub struct FrameHandlerConfig {
   /// Terminal size (width, height)
   pub terminal_size: TerminalSize,
 
-  /// 
-  pub cam_window_scale: CamWindowScale
+  /// Camera window scale
+  pub cam_window_scale: CamWindowScale,
+
+  /// Active camera id
+  pub camera: Camera,
 }
 
 impl FrameHandlerConfig {
@@ -47,7 +87,8 @@ impl FrameHandlerConfig {
     Self {
       image_convert_type: ImageConvertType::Colorful,
       terminal_size: (terminal_size.width, terminal_size.height),
-      cam_window_scale: CamWindowScale::Small
+      cam_window_scale: CamWindowScale::Small,
+      camera: Camera::default(),
     }
   }
 }
@@ -65,7 +106,7 @@ fn convert_into_grayscale(frame: &opencv::core::Mat, res_frame: &mut opencv::cor
 /// based on that intensity.
 pub fn convert_frame_into_ascii(
   frame: opencv::core::Mat,
-  image_convert_type: ImageConvertType
+  image_convert_type: ImageConvertType,
 ) -> Text<'static> {
   let mut lines = Vec::new();
 
@@ -79,20 +120,21 @@ pub fn convert_frame_into_ascii(
         },
         ImageConvertType::GrayScale => {
           let intensity = frame.at_2d::<u8>(y, x).unwrap();
-          let char_index = (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
+          let char_index =
+            (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
 
           (ASCII_CHARS[char_index], Color::Rgb(255, 255, 255))
         },
         ImageConvertType::Threshold => {
           let intensity = frame.at_2d::<u8>(y, x).unwrap();
-          (if *intensity > 150 { '█' } else { ' ' }, Color::Rgb(255, 255, 255))
+          (
+            if *intensity > 150 { '█' } else { ' ' },
+            Color::Rgb(255, 255, 255),
+          )
         }
       };
 
-      spans.push(
-        Span::from(ascii_char.to_string())
-        .style(Style::default().fg(color))
-      );
+      spans.push(Span::from(ascii_char.to_string()).style(Style::default().fg(color)));
     }
 
     lines.push(Line::from(spans));
@@ -101,18 +143,16 @@ pub fn convert_frame_into_ascii(
   Text::from(lines)
 }
 
-
 pub struct FrameHandler;
 
 impl FrameHandler {
-
   /// Spawns a new Tokio task.
-  /// 
+  ///
   /// This task opens a device camera, captures a frame, and resizes the image.
   /// If frame is a GrayScale or Threshold converts into approriate format
   pub fn try_new(
     config: Arc<RwLock<FrameHandlerConfig>>,
-    tx: tokio::sync::mpsc::UnboundedSender<AppEvent>
+    tx: tokio::sync::mpsc::UnboundedSender<AppEvent>,
   ) -> opencv::Result<Self> {
     let mut cam = VideoCapture::new(4, videoio::CAP_ANY)?;
     let mut frame = opencv::core::Mat::default();
@@ -130,7 +170,7 @@ impl FrameHandler {
 
         let cam_size = opencv::core::Size {
           width: (config.terminal_size.0 / config.cam_window_scale.clone() as u16) as i32,
-          height: (config.terminal_size.1 / config.cam_window_scale.clone() as u16) as i32
+          height: (config.terminal_size.1 / config.cam_window_scale.clone() as u16) as i32,
         };
 
         opencv::imgproc::resize(
@@ -139,8 +179,9 @@ impl FrameHandler {
           cam_size,
           0.0,
           0.0,
-          opencv::imgproc::INTER_LINEAR
-        ).unwrap();
+          opencv::imgproc::INTER_LINEAR,
+        )
+        .unwrap();
 
         let res_frame = match config.image_convert_type {
           ImageConvertType::Colorful => small_frame.clone(),
@@ -148,7 +189,7 @@ impl FrameHandler {
             let mut gray_frame = opencv::core::Mat::default();
             convert_into_grayscale(&small_frame, &mut gray_frame);
             gray_frame
-          },
+          }
           ImageConvertType::Threshold => {
             let mut gray_frame = opencv::core::Mat::default();
             let mut binary_frame = opencv::core::Mat::default();
@@ -158,25 +199,26 @@ impl FrameHandler {
             imgproc::threshold(
               &gray_frame,
               &mut binary_frame,
-              128.0, 255.0,
-              imgproc::THRESH_BINARY
-            ).unwrap();
+              128.0,
+              255.0,
+              imgproc::THRESH_BINARY,
+            )
+            .unwrap();
 
             binary_frame
           }
         };
 
-        let ascii_frame = convert_frame_into_ascii(
-          res_frame,
-          config.image_convert_type.clone()
-        );
+        let ascii_frame = convert_frame_into_ascii(res_frame, config.image_convert_type.clone());
 
-        if tx.send(AppEvent::AsciiFrame(ascii_frame)).is_err() { break; }
+        if tx.send(AppEvent::AsciiFrame(ascii_frame)).is_err() {
+          break;
+        }
         interval.tick().await;
       }
     });
 
-    Ok(Self {})
+    Ok(Self)
   }
 }
 
@@ -198,7 +240,9 @@ impl EventHandler {
         if let Some(Ok(event)) = crossterm_event {
           match event {
             Event::Key(key_code) => tx.send(AppEvent::Event(key_code)).unwrap(),
-            Event::Resize(width, height) => tx.send(AppEvent::TerminalResize((width, height))).unwrap(),
+            Event::Resize(width, height) => {
+              tx.send(AppEvent::TerminalResize((width, height))).unwrap()
+            }
             _ => {}
           }
         }

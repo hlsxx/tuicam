@@ -8,9 +8,7 @@ use app::App;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
   let mut terminal = ratatui::init();
 
-  let app_result = App::try_new(&mut terminal)?
-    .run()
-    .await;
+  let app_result = App::try_new(&mut terminal)?.run().await;
 
   ratatui::restore();
 

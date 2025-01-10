@@ -4,17 +4,17 @@ use tokio::sync::RwLock;
 use crate::{channel::AppEvent, handler::CamWindowScale};
 
 use ratatui::{
+  crossterm::event::KeyCode,
   layout::{Alignment, Constraint, Direction, Flex, Layout},
   style::{Color, Style, Stylize},
   text::{Line, Span, Text},
   widgets::{Block, BorderType, Clear, Paragraph},
-  crossterm::event::KeyCode,
-  DefaultTerminal
+  DefaultTerminal,
 };
 
 use crate::{
   channel::Channel,
-  handler::{EventHandler, FrameHandler, FrameHandlerConfig, ImageConvertType}
+  handler::{EventHandler, FrameHandler, FrameHandlerConfig, ImageConvertType},
 };
 
 /// Camera TUI frame border color
@@ -33,25 +33,19 @@ pub struct App<'a> {
   frame_buffer: Text<'static>,
 
   // Frame handler config (for a switchable image proccessing modes)
-  frame_handler_config: Arc<RwLock<FrameHandlerConfig>>
+  frame_handler_config: Arc<RwLock<FrameHandlerConfig>>,
 }
 
-
 impl<'a> App<'a> {
-
   /// Try to create new app
   ///
   /// App includes run method (render TUI)
   /// Try to creates a frame handler and event handler
-  pub fn try_new(
-    terminal: &'a mut DefaultTerminal
-  ) -> Result<Self, Box<dyn std::error::Error>> {
+  pub fn try_new(terminal: &'a mut DefaultTerminal) -> Result<Self, Box<dyn std::error::Error>> {
     let mut channel = Channel::new();
     let terminal_size = terminal.size()?;
 
-    let frame_handler_config = Arc::new(RwLock::new(
-      FrameHandlerConfig::new(terminal_size))
-    );
+    let frame_handler_config = Arc::new(RwLock::new(FrameHandlerConfig::new(terminal_size)));
 
     let _frame_handler = FrameHandler::try_new(frame_handler_config.clone(), channel.get_tx())?;
     let _event_handler = EventHandler::new(channel.get_tx());
@@ -60,12 +54,12 @@ impl<'a> App<'a> {
       terminal,
       channel,
       frame_buffer: Text::default(),
-      frame_handler_config
+      frame_handler_config,
     })
   }
 
   /// Runs TUI application
-  /// 
+  ///
   /// Handles user events
   ///
   /// Renders widgets into frames
@@ -78,13 +72,12 @@ impl<'a> App<'a> {
       if let Some(app_event) = self.channel.next().await {
         match app_event {
           AppEvent::AsciiFrame(ascii_frame) => self.frame_buffer = ascii_frame,
-          AppEvent::Event(key_event) => {
-            match key_event.code {
-              KeyCode::Char(' ') => self.switch_mode().await,
-              KeyCode::Char('f') => self.switch_cam_window_scale().await,
-              KeyCode::Esc => break,
-              _ => {}
-            }
+          AppEvent::Event(key_event) => match key_event.code {
+            KeyCode::Char(' ') => self.switch_mode().await,
+            KeyCode::Char('f') => self.switch_cam_window_scale().await,
+            KeyCode::Char('c') => self.switch_cam().await,
+            KeyCode::Esc => break,
+            _ => {}
           },
           AppEvent::TerminalResize((width, height)) => {
             self.frame_handler_config.write().await.terminal_size = (width, height);
@@ -92,14 +85,21 @@ impl<'a> App<'a> {
         }
       }
 
-      let cam_window_scale = self.frame_handler_config.read().await
-        .cam_window_scale.clone() as u16;
+      let cam_window_scale = self
+        .frame_handler_config
+        .read()
+        .await
+        .cam_window_scale
+        .clone() as u16;
 
       self.terminal.draw(|frame| {
         let area = frame.area();
 
-        let chunks = Layout::new(Direction::Vertical, [
-          Constraint::Percentage(100), Constraint::Length(2) ]).split(area);
+        let chunks = Layout::new(
+          Direction::Vertical,
+          [Constraint::Percentage(100), Constraint::Length(2)],
+        )
+        .split(area);
 
         let top_chunk = chunks[0];
         let bottom_chunk = chunks[1];
@@ -115,27 +115,26 @@ impl<'a> App<'a> {
           .alignment(Alignment::Center)
           .centered();
 
-        let horizontal = Layout::horizontal([
-          Constraint::Length(terminal_size.width / cam_window_scale)
-        ]).flex(Flex::Center);
+        let horizontal =
+          Layout::horizontal([Constraint::Length(terminal_size.width / cam_window_scale)])
+            .flex(Flex::Center);
 
-        let vertical = Layout::vertical([
-          Constraint::Length(terminal_size.height / cam_window_scale)
-        ]).flex(Flex::Center);
+        let vertical =
+          Layout::vertical([Constraint::Length(terminal_size.height / cam_window_scale)])
+            .flex(Flex::Center);
 
         let [top_chunk] = vertical.areas(top_chunk);
         let [top_chunk] = horizontal.areas(top_chunk);
 
-        let tools_text = Text::from(vec![
-          Line::from(vec![
-            Span::from("ESC").bold(),
-            Span::from(" exit | "),
-            Span::from("[ __ ]").bold(),
-            Span::from(" switch mode | "),
-            Span::from("f").bold(),
-            Span::from(" toggle fullscreen")
-          ]).style(Style::default().fg(PRIMARY_COLOR))
-        ]);
+        let tools_text = Text::from(vec![Line::from(vec![
+          Span::from("ESC").bold(),
+          Span::from(" exit | "),
+          Span::from("[ __ ]").bold(),
+          Span::from(" switch mode | "),
+          Span::from("f").bold(),
+          Span::from(" toggle fullscreen"),
+        ])
+        .style(Style::default().fg(PRIMARY_COLOR))]);
 
         let tools_paragraph = Paragraph::new(tools_text)
           .alignment(Alignment::Center)
@@ -158,7 +157,7 @@ impl<'a> App<'a> {
     let new_image_convert_type = match self.frame_handler_config.read().await.image_convert_type {
       ImageConvertType::Colorful => ImageConvertType::GrayScale,
       ImageConvertType::GrayScale => ImageConvertType::Threshold,
-      ImageConvertType::Threshold => ImageConvertType::Colorful
+      ImageConvertType::Threshold => ImageConvertType::Colorful,
     };
 
     self.frame_handler_config.write().await.image_convert_type = new_image_convert_type;
@@ -171,9 +170,17 @@ impl<'a> App<'a> {
   pub async fn switch_cam_window_scale(&mut self) {
     let cam_window_scale = match self.frame_handler_config.read().await.cam_window_scale {
       CamWindowScale::Small => CamWindowScale::Full,
-      CamWindowScale::Full => CamWindowScale::Small
+      CamWindowScale::Full => CamWindowScale::Small,
     };
 
     self.frame_handler_config.write().await.cam_window_scale = cam_window_scale;
+  }
+
+  /// Switches a device camera
+  pub async fn switch_cam(&mut self) {
+    // let id_cam = match self.frame_handler_config.read().await.id_cam {
+    // };
+
+    // self.frame_handler_config.write().await.cam_id = 1;
   }
 }
