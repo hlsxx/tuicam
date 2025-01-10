@@ -37,33 +37,41 @@ pub enum CamWindowScale {
 
 /// Camera contains all available device cameras
 pub struct Camera {
-  active_index: Option<i32>,
-  ids: Vec<i32>
+  pub(crate) active_index: Option<i32>,
+  ids: Vec<i32>,
 }
 
 impl Camera {
   pub fn default() -> Self {
-    let ids = (0..=10).filter_map(|id| {
-      if let Ok(cam) = VideoCapture::new(id, videoio::CAP_ANY) {
-        if cam.is_opened().unwrap_or(false) {
-          return Some(id);
-        } else {
-          return None;
+    let ids = (0..=10)
+      .filter_map(|id| {
+        if let Ok(cam) = VideoCapture::new(id, videoio::CAP_ANY) {
+          if cam.is_opened().unwrap_or(false) {
+            return Some(id);
+          } else {
+            return None;
+          }
         }
-      }
 
-      None
-    }).collect::<Vec<i32>>();
+        None
+      })
+      .collect::<Vec<i32>>();
 
     Self {
       active_index: ids.get(0).copied(),
-      ids
+      ids,
     }
   }
 
   /// Switches current camera
   pub fn switch(&mut self) {
-    
+    if let Some(active_index) = self.active_index.as_mut() {
+      if self.ids.len() > (*active_index + 1) as usize {
+        *active_index += 1;
+      } else {
+        *active_index = 0;
+      }
+    }
   }
 }
 
@@ -117,14 +125,14 @@ pub fn convert_frame_into_ascii(
         ImageConvertType::Colorful => {
           let pixel = frame.at_2d::<opencv::core::Vec3b>(y, x).unwrap();
           ('█', Color::Rgb(pixel[2], pixel[1], pixel[0]))
-        },
+        }
         ImageConvertType::GrayScale => {
           let intensity = frame.at_2d::<u8>(y, x).unwrap();
           let char_index =
             (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
 
           (ASCII_CHARS[char_index], Color::Rgb(255, 255, 255))
-        },
+        }
         ImageConvertType::Threshold => {
           let intensity = frame.at_2d::<u8>(y, x).unwrap();
           (
@@ -154,10 +162,15 @@ impl FrameHandler {
     config: Arc<RwLock<FrameHandlerConfig>>,
     tx: tokio::sync::mpsc::UnboundedSender<AppEvent>,
   ) -> opencv::Result<Self> {
-    let mut cam = VideoCapture::new(4, videoio::CAP_ANY)?;
-    let mut frame = opencv::core::Mat::default();
-
     let _handle = tokio::spawn(async move {
+      let mut cam = VideoCapture::new(
+        config.read().await.camera.active_index.unwrap_or(0),
+        videoio::CAP_ANY,
+      )
+      .unwrap();
+
+      let mut frame = opencv::core::Mat::default();
+
       // Camera frame delay
       let mut interval = tokio::time::interval(Duration::from_millis(50));
 

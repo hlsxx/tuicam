@@ -178,9 +178,6 @@ impl<'a> App<'a> {
 
   /// Switches a device camera
   pub async fn switch_cam(&mut self) {
-    // let id_cam = match self.frame_handler_config.read().await.id_cam {
-    // };
-
-    // self.frame_handler_config.write().await.cam_id = 1;
+    self.frame_handler_config.write().await.camera.switch();
   }
 }
