@@ -131,6 +131,8 @@ impl<'a> App<'a> {
           Span::from(" exit | "),
           Span::from("[ __ ]").bold(),
           Span::from(" switch mode | "),
+          Span::from("c").bold(),
+          Span::from(" switch camera | "),
           Span::from("f").bold(),
           Span::from(" toggle fullscreen"),
         ])
