@@ -38,28 +38,28 @@ pub enum CamWindowScale {
 /// Camera contains all available device cameras
 pub struct Camera {
   pub(crate) active_index: Option<i32>,
-  ids: Vec<i32>,
+  pub(crate) ids: Vec<i32>,
 }
 
 impl Camera {
   pub fn default() -> Self {
-    let ids = (0..=10)
-      .filter_map(|id| {
-        if let Ok(cam) = VideoCapture::new(id, videoio::CAP_ANY) {
-          if cam.is_opened().unwrap_or(false) {
-            return Some(id);
-          } else {
-            return None;
-          }
-        }
-
-        None
-      })
-      .collect::<Vec<i32>>();
+    // let ids = (0..=10)
+    //   .filter_map(|id| {
+    //     if let Ok(cam) = VideoCapture::new(id, videoio::CAP_ANY) {
+    //       if cam.is_opened().unwrap_or(false) {
+    //         return Some(id);
+    //       } else {
+    //         return None;
+    //       }
+    //     }
+    //
+    //     None
+    //   })
+    //   .collect::<Vec<i32>>();
 
     Self {
-      active_index: ids.get(0).copied(),
-      ids,
+      active_index: Some(0),
+      ids: Vec::new(),
     }
   }
 

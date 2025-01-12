@@ -131,8 +131,6 @@ impl<'a> App<'a> {
           Span::from(" exit | "),
           Span::from("[ __ ]").bold(),
           Span::from(" switch mode | "),
-          Span::from("c").bold(),
-          Span::from(" switch camera | "),
           Span::from("f").bold(),
           Span::from(" toggle fullscreen"),
         ])
@@ -179,6 +177,7 @@ impl<'a> App<'a> {
   }
 
   /// Switches a device camera
+  #[allow(unused)]
   pub async fn switch_cam(&mut self) {
     self.frame_handler_config.write().await.camera.switch();
   }
