@@ -2,7 +2,7 @@
   <h3 align="center">Tuicam</h3>
 
   <p align="center">
-    Terminal based ASCII camera
+    It's just a terminal-based ASCII camera, not particularly useful
   </p>
 </div>
 
@@ -10,8 +10,6 @@
 </div>
 
 </br>
-
-Terminal based ASCII camera
 
 ## Usage / Shortcuts
 
