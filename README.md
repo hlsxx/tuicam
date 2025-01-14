@@ -9,13 +9,3 @@
 <div align="center">
   <img src="https://github.com/hlsxx/tuicam/blob/master/blob/example.png" alt="Tuicam" style="width:100%; max-height:400px" />
 </div>
-
-</br>
-
-## Usage / Shortcuts
-
-|  Key | Action |
-| ------------ | ------------ |
-| esc  |  Exit application |
-| space | Switch mode |
-| f | Toggle fullscreen |
