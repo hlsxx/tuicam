@@ -7,7 +7,7 @@
 </div>
 
 <div align="center">
-  <img src="https://github.com/hlsxx/tuicam/blob/master/blob/example.gif" alt="Tuicam" style="width:100%; max-height:400px" />
+  <img src="https://github.com/hlsxx/tuicam/blob/master/blob/example.png" alt="Tuicam" style="width:100%; max-height:400px" />
 </div>
 
 </br>
