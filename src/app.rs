@@ -73,7 +73,7 @@ impl<'a> App<'a> {
         match app_event {
           AppEvent::AsciiFrame(ascii_frame) => self.frame_buffer = ascii_frame,
           AppEvent::Event(key_event) => match key_event.code {
-            KeyCode::Char(' ') => self.switch_mode().await,
+            KeyCode::Char(' ') | KeyCode::Char('m') => self.switch_mode().await,
             KeyCode::Char('f') => self.switch_cam_window_scale().await,
             KeyCode::Char('c') => self.switch_cam().await,
             KeyCode::Esc => break,
@@ -155,9 +155,11 @@ impl<'a> App<'a> {
   /// Switch: Image -> GrayScale -> Threshold ->  ASCII
   pub async fn switch_mode(&mut self) {
     let new_image_convert_type = match self.frame_handler_config.read().await.image_convert_type {
+      ImageConvertType::ColorfulHalfBlock => ImageConvertType::Colorful,
       ImageConvertType::Colorful => ImageConvertType::GrayScale,
-      ImageConvertType::GrayScale => ImageConvertType::Threshold,
-      ImageConvertType::Threshold => ImageConvertType::Colorful,
+      ImageConvertType::GrayScale => ImageConvertType::GrayScaleThreshold,
+      ImageConvertType::GrayScaleThreshold => ImageConvertType::Threshold,
+      ImageConvertType::Threshold => ImageConvertType::ColorfulHalfBlock,
     };
 
     self.frame_handler_config.write().await.image_convert_type = new_image_convert_type;

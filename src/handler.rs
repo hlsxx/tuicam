@@ -23,8 +23,10 @@ type TerminalSize = (u16, u16);
 #[derive(Eq, PartialEq, Clone)]
 #[allow(unused)]
 pub enum ImageConvertType {
+  ColorfulHalfBlock,
   Colorful,
   GrayScale,
+  GrayScaleThreshold,
   Threshold,
 }
 
@@ -93,7 +95,7 @@ pub struct FrameHandlerConfig {
 impl FrameHandlerConfig {
   pub fn new(terminal_size: Size) -> Self {
     Self {
-      image_convert_type: ImageConvertType::Colorful,
+      image_convert_type: ImageConvertType::ColorfulHalfBlock,
       terminal_size: (terminal_size.width, terminal_size.height),
       cam_window_scale: CamWindowScale::Small,
       camera: Camera::default(),
@@ -104,6 +106,22 @@ impl FrameHandlerConfig {
 /// Converts a frame into a grayscale.
 fn convert_into_grayscale(frame: &opencv::core::Mat, res_frame: &mut opencv::core::Mat) {
   imgproc::cvt_color(frame, res_frame, imgproc::COLOR_BGR2GRAY, 0).unwrap()
+}
+
+/// Computes the distance between two colors
+fn color_dist(lhs: &[u8; 3], rhs: &[u8; 3]) -> u32 {
+  let x = lhs[0].abs_diff(rhs[0]) as u32;
+  let y = lhs[1].abs_diff(rhs[1]) as u32;
+  let z = lhs[2].abs_diff(rhs[2]) as u32;
+  x * x + y * y + z * z
+}
+
+/// Computes the distance between two colors
+fn color_average<const N: usize>(colors: [[u8; 3]; N]) -> [u8; 3] {
+  let x = colors.iter().map(|color| color[0] as u32).sum::<u32>() / (N as u32);
+  let y = colors.iter().map(|color| color[1] as u32).sum::<u32>() / (N as u32);
+  let z = colors.iter().map(|color| color[2] as u32).sum::<u32>() / (N as u32);
+  [x as u8, y as u8, z as u8]
 }
 
 /// Converts a camera frame into ASCII frame.
@@ -118,31 +136,140 @@ pub fn convert_frame_into_ascii(
 ) -> Text<'static> {
   let mut lines = Vec::new();
 
-  for y in 0..frame.rows() {
+  let (width, height) = match image_convert_type {
+    ImageConvertType::ColorfulHalfBlock => (frame.cols() / 2, frame.rows() / 2),
+    _ => (frame.cols(), frame.rows()),
+  };
+
+  for y in 0..height {
     let mut spans = Vec::new();
-    for x in 0..frame.cols() {
-      let (ascii_char, color) = match image_convert_type {
+    for x in 0..width {
+      let (ascii_char, fg_color, bg_color) = match image_convert_type {
+        ImageConvertType::ColorfulHalfBlock => {
+          // Sub-character colors are arranged as shown below.
+          //
+          //  0 | 1
+          //  --+--
+          //  2 | 3
+          let subpixels: [_; 4] = std::array::from_fn(|i| {
+            let i = i as i32;
+            let pixel = frame
+              .at_2d::<opencv::core::Vec3b>(y * 2 + i / 2, x * 2 + i % 2)
+              .unwrap();
+            [pixel[0], pixel[1], pixel[2]]
+          });
+
+          // Find the two nearest subpixels.  These two will define
+          // the foreground color.
+          let (fg1, fg2, other1, other2) = [
+            (0, 1, 2, 3),
+            (0, 2, 1, 3),
+            (0, 3, 1, 2),
+            (1, 2, 0, 3),
+            (1, 3, 0, 2),
+            (2, 3, 0, 1),
+          ]
+          .into_iter()
+          .min_by_key(|(i, j, _, _)| color_dist(&subpixels[*i], &subpixels[*j]))
+          .unwrap();
+
+          let fg_color = color_average([subpixels[fg1], subpixels[fg2]]);
+
+          // Of the two remaining colors, is one of them closer to the
+          // foreground color than they are to each other?
+          let dist_remaining = color_dist(&subpixels[other1], &subpixels[other2]);
+          let dist_1 = color_dist(&fg_color, &subpixels[other1]);
+          let dist_2 = color_dist(&fg_color, &subpixels[other2]);
+
+          let (fg_char, fg_color, bg_color) = if dist_remaining < dist_1 && dist_remaining < dist_2
+          {
+            // The two remaining colors are closer to each other
+            // than they are to the foreground color.  They will
+            // both share the same background color.
+            let bg_color = color_average([subpixels[other1], subpixels[other2]]);
+            let fg_char = match (fg1, fg2) {
+              (0, 1) => '▀',
+              (0, 2) => '▌',
+              (0, 3) => '▚',
+              (1, 2) => '▞',
+              (1, 3) => '▐',
+              (2, 3) => '▄',
+              _ => unreachable!(),
+            };
+            (fg_char, fg_color, bg_color)
+          } else if dist_1 < dist_2 {
+            // The point at `other1` is close to the fg color.
+            // Therefore, average those three into the foreground, and
+            // use the background for the last color.
+            let fg_color = color_average([subpixels[fg1], subpixels[fg2], subpixels[other1]]);
+            let bg_color = subpixels[other2];
+            let fg_char = match other2 {
+              0 => '▟',
+              1 => '▙',
+              2 => '▜',
+              3 => '▛',
+              _ => unreachable!(),
+            };
+
+            (fg_char, fg_color, bg_color)
+          } else {
+            // The point at `other2` is close to the fg color.
+            // Therefore, average those three into the foreground, and
+            // use the background for the last color.
+            let fg_color = color_average([subpixels[fg1], subpixels[fg2], subpixels[other2]]);
+            let bg_color = subpixels[other1];
+            let fg_char = match other1 {
+              0 => '▟',
+              1 => '▙',
+              2 => '▜',
+              3 => '▛',
+              _ => unreachable!(),
+            };
+            (fg_char, fg_color, bg_color)
+          };
+
+          (
+            fg_char,
+            Color::Rgb(fg_color[2], fg_color[1], fg_color[0]),
+            Color::Rgb(bg_color[2], bg_color[1], bg_color[0]),
+          )
+        }
         ImageConvertType::Colorful => {
           let pixel = frame.at_2d::<opencv::core::Vec3b>(y, x).unwrap();
-          ('█', Color::Rgb(pixel[2], pixel[1], pixel[0]))
+          ('█', Color::Rgb(pixel[2], pixel[1], pixel[0]), Color::Reset)
         }
         ImageConvertType::GrayScale => {
+          let intensity = frame.at_2d::<u8>(y, x).unwrap();
+
+          (
+            '█',
+            Color::Rgb(*intensity, *intensity, *intensity),
+            Color::Reset,
+          )
+        }
+        ImageConvertType::GrayScaleThreshold => {
           let intensity = frame.at_2d::<u8>(y, x).unwrap();
           let char_index =
             (*intensity as f32 * (ASCII_CHARS.len() - 1) as f32 / 255.0).round() as usize;
 
-          (ASCII_CHARS[char_index], Color::Rgb(255, 255, 255))
+          (
+            ASCII_CHARS[char_index],
+            Color::Rgb(255, 255, 255),
+            Color::Reset,
+          )
         }
         ImageConvertType::Threshold => {
           let intensity = frame.at_2d::<u8>(y, x).unwrap();
           (
             if *intensity > 150 { '█' } else { ' ' },
             Color::Rgb(255, 255, 255),
+            Color::Reset,
           )
         }
       };
 
-      spans.push(Span::from(ascii_char.to_string()).style(Style::default().fg(color)));
+      let style = Style::default().fg(fg_color).bg(bg_color);
+      spans.push(Span::from(ascii_char.to_string()).style(style));
     }
 
     lines.push(Line::from(spans));
@@ -185,6 +312,13 @@ impl FrameHandler {
           width: (config.terminal_size.0 / config.cam_window_scale.clone() as u16) as i32,
           height: (config.terminal_size.1 / config.cam_window_scale.clone() as u16) as i32,
         };
+        let cam_size = match config.image_convert_type {
+          ImageConvertType::ColorfulHalfBlock => opencv::core::Size {
+            width: cam_size.width * 2,
+            height: cam_size.height * 2,
+          },
+          _ => cam_size,
+        };
 
         opencv::imgproc::resize(
           &frame,
@@ -197,8 +331,8 @@ impl FrameHandler {
         .unwrap();
 
         let res_frame = match config.image_convert_type {
-          ImageConvertType::Colorful => small_frame.clone(),
-          ImageConvertType::GrayScale => {
+          ImageConvertType::Colorful | ImageConvertType::ColorfulHalfBlock => small_frame.clone(),
+          ImageConvertType::GrayScale | ImageConvertType::GrayScaleThreshold => {
             let mut gray_frame = opencv::core::Mat::default();
             convert_into_grayscale(&small_frame, &mut gray_frame);
             gray_frame
