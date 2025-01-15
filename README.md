@@ -9,3 +9,7 @@
 <div align="center">
   <img src="https://github.com/hlsxx/tuicam/blob/master/blob/example.png" alt="Tuicam" style="width:100%; max-height:400px" />
 </div>
+
+<div align="center mt-5">
+  <img src="https://github.com/hlsxx/tuicam/blob/master/blob/example2.png" alt="Tuicam colorful" style="width:100%; max-height:400px" />
+</div>
