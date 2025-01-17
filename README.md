@@ -1,8 +1,17 @@
 <div align="center">
   <h3 align="center">Tuicam</h3>
 
+  <p align="center text-bold">
+    It's just a terminal-based ASCII camera
+  </p>
+
+  <p align="center text-bold">
+    Available in <a href="https://crates.io/crates/tuicam">crates.io</a>
+    cargo install tuicam
+  </p>
+
   <p align="center">
-    It's just a terminal-based ASCII camera, not particularly useful
+    Before using this project, please install <b>OpenCV</b>
   </p>
 </div>
 
