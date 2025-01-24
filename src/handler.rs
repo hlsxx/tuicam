@@ -14,7 +14,7 @@ use opencv::{
   prelude::*,
   videoio::{self, VideoCapture, VideoCaptureTrait},
 };
-
+use opencv::core::AlgorithmHint;
 use crate::app::ASCII_CHARS;
 use crate::channel::AppEvent;
 
@@ -105,7 +105,7 @@ impl FrameHandlerConfig {
 
 /// Converts a frame into a grayscale.
 fn convert_into_grayscale(frame: &opencv::core::Mat, res_frame: &mut opencv::core::Mat) {
-  imgproc::cvt_color(frame, res_frame, imgproc::COLOR_BGR2GRAY, 0).unwrap()
+  imgproc::cvt_color(frame, res_frame, imgproc::COLOR_BGR2GRAY, 0, AlgorithmHint::ALGO_HINT_DEFAULT).unwrap()
 }
 
 /// Computes the distance between two colors
