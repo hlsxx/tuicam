@@ -7,7 +7,7 @@
 
   <p align="center text-bold">
     Available in <a href="https://crates.io/crates/tuicam">crates.io</a>
-    cargo install tuicam
+    <i>cargo install tuicam</i>
   </p>
 
   <p align="center">

@@ -10,7 +10,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   opencv::core::set_log_level(opencv::core::LogLevel::LOG_LEVEL_SILENT)?;
 
-  let app_result = App::try_new(&mut terminal)?.run().await;
+  let app_result = App::try_new(&mut terminal).await?
+    .run().await;
 
   ratatui::restore();
 

@@ -41,13 +41,19 @@ impl<'a> App<'a> {
   ///
   /// App includes run method (render TUI)
   /// Try to creates a frame handler and event handler
-  pub fn try_new(terminal: &'a mut DefaultTerminal) -> Result<Self, Box<dyn std::error::Error>> {
+  pub async fn try_new(terminal: &'a mut DefaultTerminal) -> Result<Self, Box<dyn std::error::Error>> {
     let mut channel = Channel::new();
     let terminal_size = terminal.size()?;
 
-    let frame_handler_config = Arc::new(RwLock::new(FrameHandlerConfig::new(terminal_size)));
+    let frame_handler_config = Arc::new(
+      RwLock::new(FrameHandlerConfig::new(terminal_size))
+    );
 
-    let _frame_handler = FrameHandler::try_new(frame_handler_config.clone(), channel.get_tx())?;
+    let frame_handler = FrameHandler::try_new(frame_handler_config.clone(), channel.get_tx())
+      .await?;
+
+    frame_handler.run();
+
     let _event_handler = EventHandler::new(channel.get_tx());
 
     Ok(Self {
@@ -179,8 +185,11 @@ impl<'a> App<'a> {
   }
 
   /// Switches a device camera
-  #[allow(unused)]
   pub async fn switch_cam(&mut self) {
-    self.frame_handler_config.write().await.camera.switch();
+    self.frame_handler_config
+      .write()
+      .await
+      .camera
+      .switch();
   }
 }

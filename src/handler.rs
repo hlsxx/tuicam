@@ -45,23 +45,23 @@ pub struct Camera {
 
 impl Camera {
   pub fn default() -> Self {
-    // let ids = (0..=10)
-    //   .filter_map(|id| {
-    //     if let Ok(cam) = VideoCapture::new(id, videoio::CAP_ANY) {
-    //       if cam.is_opened().unwrap_or(false) {
-    //         return Some(id);
-    //       } else {
-    //         return None;
-    //       }
-    //     }
-    //
-    //     None
-    //   })
-    //   .collect::<Vec<i32>>();
+    let ids = (0..=10)
+      .filter_map(|id| {
+        if let Ok(cam) = VideoCapture::new(id, videoio::CAP_ANY) {
+          if cam.is_opened().unwrap_or(false) {
+            return Some(id);
+          } else {
+            return None;
+          }
+        }
+
+        None
+      })
+      .collect::<Vec<i32>>();
 
     Self {
       active_index: Some(0),
-      ids: Vec::new(),
+      ids
     }
   }
 
@@ -278,35 +278,49 @@ pub fn convert_frame_into_ascii(
   Text::from(lines)
 }
 
-pub struct FrameHandler;
+pub struct FrameHandler {
+  config: Arc<RwLock<FrameHandlerConfig>>,
+  cam: Arc<RwLock<VideoCapture>>,
+  tx: tokio::sync::mpsc::UnboundedSender<AppEvent>,
+}
 
 impl FrameHandler {
+  pub async fn try_new(
+    config: Arc<RwLock<FrameHandlerConfig>>,
+    tx: tokio::sync::mpsc::UnboundedSender<AppEvent>,
+  ) -> opencv::Result<Self> {
+    let cam = VideoCapture::new(
+      config.read().await.camera.active_index.unwrap_or(0),
+      videoio::CAP_ANY,
+    ).unwrap();
+
+    Ok(Self {
+      config,
+      cam: Arc::new(RwLock::new(cam)),
+      tx
+    })
+  }
+
   /// Spawns a new Tokio task.
   ///
   /// This task opens a device camera, captures a frame, and resizes the image.
   /// If frame is a GrayScale or Threshold converts into approriate format
-  pub fn try_new(
-    config: Arc<RwLock<FrameHandlerConfig>>,
-    tx: tokio::sync::mpsc::UnboundedSender<AppEvent>,
-  ) -> opencv::Result<Self> {
-    let _handle = tokio::spawn(async move {
-      let mut cam = VideoCapture::new(
-        config.read().await.camera.active_index.unwrap_or(0),
-        videoio::CAP_ANY,
-      )
-      .unwrap();
+  pub async fn run(self) -> opencv::Result<()> {
+    let cam = self.cam.clone();
 
+    let _handle = tokio::spawn(async move {
+      cam.read().await;
       let mut frame = opencv::core::Mat::default();
 
       // Camera frame delay
       let mut interval = tokio::time::interval(Duration::from_millis(50));
 
       loop {
-        cam.read(&mut frame).unwrap();
+        cam.read().await.read(&mut frame).unwrap();
 
         let mut small_frame = opencv::core::Mat::default();
 
-        let config = config.read().await;
+        let config = self.config.read().await;
 
         let cam_size = opencv::core::Size {
           width: (config.terminal_size.0 / config.cam_window_scale.clone() as u16) as i32,
@@ -358,14 +372,15 @@ impl FrameHandler {
 
         let ascii_frame = convert_frame_into_ascii(res_frame, config.image_convert_type.clone());
 
-        if tx.send(AppEvent::AsciiFrame(ascii_frame)).is_err() {
+        if self.tx.send(AppEvent::AsciiFrame(ascii_frame)).is_err() {
           break;
         }
+
         interval.tick().await;
       }
     });
 
-    Ok(Self)
+    Ok(())
   }
 }
 
