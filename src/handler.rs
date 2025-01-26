@@ -7,6 +7,7 @@ use ratatui::{
   style::{Color, Style},
   text::{Line, Span, Text},
 };
+
 use tokio::sync::RwLock;
 
 use opencv::{
@@ -14,6 +15,9 @@ use opencv::{
   prelude::*,
   videoio::{self, VideoCapture, VideoCaptureTrait}
 };
+
+#[cfg(feature = "opencv_newer")]
+use opencv::core::AlgorithmHint;
 
 use crate::app::ASCII_CHARS;
 use crate::channel::AppEvent;
