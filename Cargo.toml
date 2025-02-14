@@ -1,6 +1,6 @@
 [package]
 name = "tuicam"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 description = "Terminal-based camera with switchable modes"
 license = "MIT"
@@ -11,4 +11,7 @@ ratatui = "0.29.0"
 tokio = { version = "1.41.0", features = ["full"] }
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 futures = "0.3.31"
-opencv = "0.93.5"
+opencv = { version = "0.94.2", features = ["videoio", "imgproc"] }
+
+[features]
+opencv_newer = []
