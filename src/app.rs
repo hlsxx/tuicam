@@ -52,7 +52,7 @@ impl<'a> App<'a> {
     let frame_handler = FrameHandler::try_new(frame_handler_config.clone(), channel.get_tx())
       .await?;
 
-    frame_handler.run();
+    frame_handler.run().await?;
 
     let _event_handler = EventHandler::new(channel.get_tx());
 
@@ -135,8 +135,10 @@ impl<'a> App<'a> {
         let tools_text = Text::from(vec![Line::from(vec![
           Span::from("ESC").bold(),
           Span::from(" exit | "),
-          Span::from("[ __ ]").bold(),
+          Span::from("m").bold(),
           Span::from(" switch mode | "),
+          Span::from("c").bold(),
+          Span::from(" switch camera | "),
           Span::from("f").bold(),
           Span::from(" toggle fullscreen"),
         ])

@@ -8,7 +8,7 @@ use ratatui::{
   text::{Line, Span, Text},
 };
 
-use tokio::sync::RwLock;
+use tokio::sync::{watch, RwLock};
 
 use opencv::{
   imgproc,
@@ -298,7 +298,6 @@ pub fn convert_frame_into_ascii(
 
 pub struct FrameHandler {
   config: Arc<RwLock<FrameHandlerConfig>>,
-  cam: Arc<RwLock<VideoCapture>>,
   tx: tokio::sync::mpsc::UnboundedSender<AppEvent>,
 }
 
@@ -307,14 +306,8 @@ impl FrameHandler {
     config: Arc<RwLock<FrameHandlerConfig>>,
     tx: tokio::sync::mpsc::UnboundedSender<AppEvent>,
   ) -> opencv::Result<Self> {
-    let cam = VideoCapture::new(
-      config.read().await.camera.active_index.unwrap_or(0),
-      videoio::CAP_ANY,
-    ).unwrap();
-
     Ok(Self {
       config,
-      cam: Arc::new(RwLock::new(cam)),
       tx
     })
   }
@@ -324,17 +317,33 @@ impl FrameHandler {
   /// This task opens a device camera, captures a frame, and resizes the image.
   /// If frame is a GrayScale or Threshold converts into approriate format
   pub async fn run(self) -> opencv::Result<()> {
-    let cam = self.cam.clone();
-
     let _handle = tokio::spawn(async move {
-      cam.read().await;
+      let mut active_cam_id = self.config.read().await.camera.active_index.unwrap_or(0);
+
+      let mut cam = VideoCapture::new(
+        active_cam_id,
+        videoio::CAP_ANY,
+      ).unwrap();
+
       let mut frame = opencv::core::Mat::default();
 
       // Camera frame delay
       let mut interval = tokio::time::interval(Duration::from_millis(50));
 
       loop {
-        cam.read().await.read(&mut frame).unwrap();
+        let current_cam_id = self.config.read().await.camera.active_index.unwrap_or(0);
+
+        if current_cam_id != active_cam_id {
+          cam = VideoCapture::new(
+            current_cam_id,
+            videoio::CAP_ANY,
+          )
+          .unwrap();
+
+          active_cam_id = current_cam_id;
+        }
+
+        cam.read(&mut frame).unwrap();
 
         let mut small_frame = opencv::core::Mat::default();
 
@@ -344,6 +353,7 @@ impl FrameHandler {
           width: (config.terminal_size.0 / config.cam_window_scale.clone() as u16) as i32,
           height: (config.terminal_size.1 / config.cam_window_scale.clone() as u16) as i32,
         };
+
         let cam_size = match config.image_convert_type {
           ImageConvertType::ColorfulHalfBlock => opencv::core::Size {
             width: cam_size.width * 2,
