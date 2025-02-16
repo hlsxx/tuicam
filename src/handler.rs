@@ -11,7 +11,9 @@ use ratatui::{
 use tokio::sync::RwLock;
 
 use opencv::{
-  core::VecN, imgproc, prelude::*, videoio::{self, VideoCapture, VideoCaptureTrait}
+  imgproc,
+  prelude::*,
+  videoio::{self, VideoCapture, VideoCaptureTrait},
 };
 
 #[cfg(feature = "opencv_newer")]
@@ -63,11 +65,11 @@ impl Camera {
 
     Self {
       active_index: Some(0),
-      ids
+      ids,
     }
   }
 
-  /// Switches current camera
+  /// Switches a current camera
   pub fn switch(&mut self) {
     if let Some(active_index) = self.active_index.as_mut() {
       if self.ids.len() > (*active_index + 1) as usize {
@@ -78,6 +80,7 @@ impl Camera {
     }
   }
 
+  /// Return a current active camera id
   pub fn get_cam_id(&self) -> Option<&i32> {
     if let Some(active_index) = self.active_index.as_ref() {
       self.ids.get(*active_index as usize)
@@ -123,7 +126,8 @@ fn convert_into_grayscale(frame: &opencv::core::Mat, res_frame: &mut opencv::cor
       imgproc::COLOR_BGR2GRAY,
       0,
       AlgorithmHint::ALGO_HINT_DEFAULT,
-    ).unwrap();
+    )
+    .unwrap();
   }
 
   #[cfg(not(feature = "opencv_newer"))]
@@ -315,21 +319,11 @@ impl FrameHandler {
     config: Arc<RwLock<FrameHandlerConfig>>,
     tx: tokio::sync::mpsc::UnboundedSender<AppEvent>,
   ) -> opencv::Result<Self> {
-    Ok(Self {
-      config,
-      tx
-    })
+    Ok(Self { config, tx })
   }
 
-  pub fn get_cam(
-    &self,
-    cam_id: i32,
-    cam: &mut Option<VideoCapture>
-  ) {
-    *cam = Some(VideoCapture::new(
-      cam_id,
-      videoio::CAP_ANY,
-    ).unwrap());
+  pub fn get_cam(&self, cam_id: i32, cam: &mut Option<VideoCapture>) {
+    *cam = Some(VideoCapture::new(cam_id, videoio::CAP_ANY).unwrap());
   }
 
   /// Spawns a new Tokio task.
@@ -346,7 +340,8 @@ impl FrameHandler {
       loop {
         let mut small_frame = opencv::core::Mat::default();
 
-        let current_cam_id = self.config
+        let current_cam_id = self
+          .config
           .read()
           .await
           .camera
