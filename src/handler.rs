@@ -8,12 +8,10 @@ use ratatui::{
   text::{Line, Span, Text},
 };
 
-use tokio::sync::{watch, RwLock};
+use tokio::sync::RwLock;
 
 use opencv::{
-  imgproc,
-  prelude::*,
-  videoio::{self, VideoCapture, VideoCaptureTrait}
+  core::VecN, imgproc, prelude::*, videoio::{self, VideoCapture, VideoCaptureTrait}
 };
 
 #[cfg(feature = "opencv_newer")]
@@ -77,6 +75,14 @@ impl Camera {
       } else {
         *active_index = 0;
       }
+    }
+  }
+
+  pub fn get_cam_id(&self) -> Option<&i32> {
+    if let Some(active_index) = self.active_index.as_ref() {
+      self.ids.get(*active_index as usize)
+    } else {
+      None
     }
   }
 }
@@ -171,9 +177,12 @@ pub fn convert_frame_into_ascii(
           //  2 | 3
           let subpixels: [_; 4] = std::array::from_fn(|i| {
             let i = i as i32;
+
             let pixel = frame
               .at_2d::<opencv::core::Vec3b>(y * 2 + i / 2, x * 2 + i % 2)
-              .unwrap();
+              .cloned()
+              .unwrap_or(opencv::core::Vec3b::from([255, 255, 255]));
+
             [pixel[0], pixel[1], pixel[2]]
           });
 
@@ -312,66 +321,78 @@ impl FrameHandler {
     })
   }
 
+  pub fn get_cam(
+    &self,
+    cam_id: i32,
+    cam: &mut Option<VideoCapture>
+  ) {
+    *cam = Some(VideoCapture::new(
+      cam_id,
+      videoio::CAP_ANY,
+    ).unwrap());
+  }
+
   /// Spawns a new Tokio task.
   ///
   /// This task opens a device camera, captures a frame, and resizes the image.
   /// If frame is a GrayScale or Threshold converts into approriate format
   pub async fn run(self) -> opencv::Result<()> {
     let _handle = tokio::spawn(async move {
-      let mut active_cam_id = self.config.read().await.camera.active_index.unwrap_or(0);
-
-      let mut cam = VideoCapture::new(
-        active_cam_id,
-        videoio::CAP_ANY,
-      ).unwrap();
+      let (mut cam, mut active_cam_id) = (None, -1);
 
       let mut frame = opencv::core::Mat::default();
-
-      // Camera frame delay
       let mut interval = tokio::time::interval(Duration::from_millis(50));
 
       loop {
-        let current_cam_id = self.config.read().await.camera.active_index.unwrap_or(0);
+        let mut small_frame = opencv::core::Mat::default();
+
+        let current_cam_id = self.config
+          .read()
+          .await
+          .camera
+          .get_cam_id()
+          .unwrap()
+          .clone();
 
         if current_cam_id != active_cam_id {
-          cam = VideoCapture::new(
-            current_cam_id,
-            videoio::CAP_ANY,
-          )
-          .unwrap();
-
+          self.get_cam(current_cam_id, &mut cam);
           active_cam_id = current_cam_id;
         }
 
-        cam.read(&mut frame).unwrap();
+        cam.as_mut().unwrap().read(&mut frame).unwrap();
 
-        let mut small_frame = opencv::core::Mat::default();
+        let cam_size = {
+          let config = self.config.read().await;
 
-        let config = self.config.read().await;
+          let cam_size = opencv::core::Size {
+            width: (config.terminal_size.0 / config.cam_window_scale.clone() as u16) as i32,
+            height: (config.terminal_size.1 / config.cam_window_scale.clone() as u16) as i32,
+          };
 
-        let cam_size = opencv::core::Size {
-          width: (config.terminal_size.0 / config.cam_window_scale.clone() as u16) as i32,
-          height: (config.terminal_size.1 / config.cam_window_scale.clone() as u16) as i32,
+          match config.image_convert_type {
+            ImageConvertType::ColorfulHalfBlock => opencv::core::Size {
+              width: cam_size.width * 2,
+              height: cam_size.height * 2,
+            },
+            _ => cam_size,
+          }
         };
 
-        let cam_size = match config.image_convert_type {
-          ImageConvertType::ColorfulHalfBlock => opencv::core::Size {
-            width: cam_size.width * 2,
-            height: cam_size.height * 2,
-          },
-          _ => cam_size,
-        };
-
-        opencv::imgproc::resize(
+        // Some virtual cams crash on the resize call.
+        // If some error occurs just switch to an another cam.
+        if let Err(_) = opencv::imgproc::resize(
           &frame,
           &mut small_frame,
           cam_size,
           0.0,
           0.0,
           opencv::imgproc::INTER_LINEAR,
-        )
-        .unwrap();
+        ) {
+          self.config.write().await.camera.switch();
+          continue;
+        }
 
+        let config = self.config.read().await;
         let res_frame = match config.image_convert_type {
           ImageConvertType::Colorful | ImageConvertType::ColorfulHalfBlock => small_frame.clone(),
           ImageConvertType::GrayScale | ImageConvertType::GrayScaleThreshold => {
