@@ -153,7 +153,7 @@ impl<'a> App<'a> {
           Span::from("f").bold(),
           Span::from(" toggle fullscreen | "),
           Span::from("ctrl-<space>").bold(),
-          Span::from(" Toggle lock"),
+          Span::from(" toggle lock"),
         ])
         .style(Style::default().fg(PRIMARY_COLOR))]);
 
