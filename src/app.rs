@@ -19,7 +19,7 @@ use crate::{
 };
 
 /// Camera TUI frame border color
-const PRIMARY_COLOR: Color = Color::Rgb(168, 50, 62);
+const PRIMARY_COLOR: Color = Color::Rgb(230, 143, 106);
 
 pub const ASCII_CHARS: &[char] = &['█', '▓', '▒', '░', ' '];
 
