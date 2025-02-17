@@ -103,6 +103,9 @@ pub struct FrameHandlerConfig {
 
   /// Active camera id
   pub camera: Camera,
+
+  /// Event handlers are locked
+  pub is_locked: bool
 }
 
 impl FrameHandlerConfig {
@@ -112,6 +115,7 @@ impl FrameHandlerConfig {
       terminal_size: (terminal_size.width, terminal_size.height),
       cam_window_scale: CamWindowScale::Small,
       camera: Camera::default(),
+      is_locked: false
     }
   }
 }
@@ -446,9 +450,7 @@ impl EventHandler {
         if let Some(Ok(event)) = crossterm_event {
           match event {
             Event::Key(key_code) => tx.send(AppEvent::Event(key_code)).unwrap(),
-            Event::Resize(width, height) => {
-              tx.send(AppEvent::TerminalResize((width, height))).unwrap()
-            }
+            Event::Resize(width, height) => tx.send(AppEvent::TerminalResize((width, height))).unwrap(),
             _ => {}
           }
         }

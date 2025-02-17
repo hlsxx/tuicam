@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use crossterm::event::KeyModifiers;
 use tokio::sync::RwLock;
 
 use crate::{channel::AppEvent, handler::CamWindowScale};
@@ -78,12 +79,20 @@ impl<'a> App<'a> {
       if let Some(app_event) = self.channel.next().await {
         match app_event {
           AppEvent::AsciiFrame(ascii_frame) => self.frame_buffer = ascii_frame,
-          AppEvent::Event(key_event) => match key_event.code {
-            KeyCode::Char(' ') | KeyCode::Char('m') => self.switch_mode().await,
-            KeyCode::Char('f') => self.switch_cam_window_scale().await,
-            KeyCode::Char('c') => self.switch_cam().await,
-            KeyCode::Esc => break,
-            _ => {}
+          AppEvent::Event(key_event) => {
+            if key_event.modifiers.contains(KeyModifiers::CONTROL) && key_event.code == KeyCode::Char(' ') {
+              self.toggle_lock().await;
+            }
+
+            if !self.frame_handler_config.read().await.is_locked {
+              match key_event.code {
+                KeyCode::Char('m') => self.switch_mode().await,
+                KeyCode::Char('f') => self.switch_cam_window_scale().await,
+                KeyCode::Char('c') => self.switch_cam().await,
+                KeyCode::Esc => break,
+                _ => {}
+              }
+            }
           },
           AppEvent::TerminalResize((width, height)) => {
             self.frame_handler_config.write().await.terminal_size = (width, height);
@@ -97,6 +106,8 @@ impl<'a> App<'a> {
         .await
         .cam_window_scale
         .clone() as u16;
+
+      let is_locked = self.frame_handler_config.read().await.is_locked;
 
       self.terminal.draw(|frame| {
         let area = frame.area();
@@ -140,7 +151,9 @@ impl<'a> App<'a> {
           Span::from("c").bold(),
           Span::from(" switch camera | "),
           Span::from("f").bold(),
-          Span::from(" toggle fullscreen"),
+          Span::from(" toggle fullscreen | "),
+          Span::from("ctrl-<space>").bold(),
+          Span::from(" Toggle lock"),
         ])
         .style(Style::default().fg(PRIMARY_COLOR))]);
 
@@ -150,7 +163,10 @@ impl<'a> App<'a> {
 
         frame.render_widget(Clear, top_chunk);
         frame.render_widget(cam_paragraph, top_chunk);
-        frame.render_widget(tools_paragraph, bottom_chunk);
+
+        if !is_locked {
+          frame.render_widget(tools_paragraph, bottom_chunk);
+        }
       })?;
     }
 
@@ -171,6 +187,15 @@ impl<'a> App<'a> {
     };
 
     self.frame_handler_config.write().await.image_convert_type = new_image_convert_type;
+  }
+
+  /// Toggles lock mode.
+  ///
+  /// Hide/Show the bottom inctruction widget.
+  /// Disables keyboard events.
+  pub async fn toggle_lock(&mut self) {
+    let mut config = self.frame_handler_config.write().await;
+    config.is_locked = !config.is_locked;
   }
 
   /// Switches a camera window scale.
