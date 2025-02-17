@@ -1,6 +1,6 @@
 [package]
 name = "tuicam"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 description = "Terminal-based camera with switchable modes"
 license = "MIT"
