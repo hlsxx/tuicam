@@ -14,4 +14,4 @@ futures = "0.3.31"
 opencv = { version = "0.94.2", features = ["videoio", "imgproc"] }
 
 [features]
-opencv_newer = []
+opencv_old = []

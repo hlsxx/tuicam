@@ -16,7 +16,7 @@ use opencv::{
   videoio::{self, VideoCapture, VideoCaptureTrait},
 };
 
-#[cfg(feature = "opencv_newer")]
+#[cfg(not(feature = "opencv_old"))]
 use opencv::core::AlgorithmHint;
 
 use crate::app::ASCII_CHARS;
@@ -122,7 +122,7 @@ impl FrameHandlerConfig {
 
 /// Converts a frame into a grayscale.
 fn convert_into_grayscale(frame: &opencv::core::Mat, res_frame: &mut opencv::core::Mat) {
-  #[cfg(feature = "opencv_newer")]
+  #[cfg(not(feature = "opencv_old"))]
   {
     imgproc::cvt_color(
       frame,
@@ -134,7 +134,7 @@ fn convert_into_grayscale(frame: &opencv::core::Mat, res_frame: &mut opencv::cor
     .unwrap();
   }
 
-  #[cfg(not(feature = "opencv_newer"))]
+  #[cfg(feature = "opencv_old")]
   {
     imgproc::cvt_color(frame, res_frame, imgproc::COLOR_BGR2GRAY, 0).unwrap();
   }
